@@ -825,3 +825,5 @@ int main() {
     std::cout << board.bishopOffsets[63];
     return 0;
 }
+
+//git test hi ~-~

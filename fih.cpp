@@ -512,13 +512,13 @@ class Board {
 
                 //add back the pawn if en passant happened
                 if (move.enPassant == true) {
-                if (moving == 0) { bPawns |= (1ULL << (move.to - 8)); } 
-                else { wPawns |= (1ULL << (move.to + 8)); }
+                    if (moving == 1) { bPawns |= (1ULL << (move.to - 8)); }  // White moved, restore black pawn
+                    else { wPawns |= (1ULL << (move.to + 8)); }              // Black moved, restore white pawn
                 }
             }
             //undo castling if it happened
             if (move.castle == true) {
-                if (moving == 0) {
+                if (moving == 1) {
                     if (move.to - move.from > 0) {
                         wRook |= (1ULL << 7);
                         wRook &= ~(1ULL << 5);
@@ -890,26 +890,31 @@ class genMove {
         genMove(Board& board) : board(board) {}
         
 
-        int perft(int depth) {
+        uint64_t perft(int depth) {
             if (depth == 0) return 1;
-            
-            int count = generateMoves();
-            Move localMoves[256];
-            for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
-            
-            int nodes = 0;
+
+            uint64_t nodes = 0;
+
+            Move moves[256];                  // temporary move list
+            int count = generateMoves(moves); // fill it
+
             for (int i = 0; i < count; i++) {
-                board.makeMove(localMoves[i]);
+                board.makeMove(moves[i]);
+
+                // only count legal moves (king not left in check)
                 if (!board.isInCheck(1 - board.moving)) {
                     nodes += perft(depth - 1);
                 }
+
                 board.unmakeMove();
             }
+
             return nodes;
         }
 
-        int generateMoves() {
+        int generateMoves(Move* moves) {
             int count = 0;
+
             uint64_t rank3Mask = 0x0000000000FF0000ULL;
             uint64_t rank6Mask = 0x0000FF0000000000ULL;
             uint64_t occ = board.getOccupancy();
@@ -942,7 +947,7 @@ class genMove {
                             move.enPassant = true;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;
+                            moves[count++] = move;
                         }
                     }
 
@@ -960,7 +965,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;
+                            moves[count++] = move;
                         }
                         //promotion logic
                         else if (to / 8 == 7){
@@ -973,7 +978,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -984,7 +989,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -995,7 +1000,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1006,7 +1011,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
                         }
                     }
 
@@ -1024,7 +1029,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;
+                            moves[count++] = move;
                         }
 
                         //promotion logic
@@ -1038,7 +1043,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1049,7 +1054,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1060,7 +1065,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1071,7 +1076,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
                         }
                     }
 
@@ -1088,7 +1093,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (knights) {
@@ -1109,7 +1114,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (bishops) {
@@ -1130,7 +1135,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (rooks) {
@@ -1151,7 +1156,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (queens) {
@@ -1172,7 +1177,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (king) {
@@ -1193,7 +1198,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
 
                     //handle kingside castle
@@ -1209,7 +1214,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = true;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                     //handle queenside castle
                     if (board.wqscr &&
@@ -1225,7 +1230,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = true;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
             }
@@ -1260,7 +1265,7 @@ class genMove {
                             move.enPassant = true;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;
+                            moves[count++] = move;
                         }
                     }
 
@@ -1278,7 +1283,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;
+                            moves[count++] = move;
                         }
                         //promotion logic
                         else if (to / 8 == 0){
@@ -1291,7 +1296,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1302,7 +1307,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1313,7 +1318,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1324,7 +1329,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
                         }
                     }
 
@@ -1342,7 +1347,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;
+                            moves[count++] = move;
                         }
 
                         //promotion logic
@@ -1356,7 +1361,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1367,7 +1372,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1378,7 +1383,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
 
                             {Move move;
                             move.from = from;
@@ -1389,7 +1394,7 @@ class genMove {
                             move.enPassant = false;
                             move.castle = false;
 
-                            board.moveHistory[count++] = move;}
+                            moves[count++] = move;}
                         }
                     }
 
@@ -1406,7 +1411,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (knights) {
@@ -1427,7 +1432,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (bishops) {
@@ -1448,7 +1453,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (rooks) {
@@ -1469,7 +1474,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (queens) {
@@ -1490,7 +1495,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
                 while (king) {
@@ -1511,7 +1516,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = false;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
 
                     //handle kingside castle
@@ -1527,7 +1532,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = true;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                     //handle queenside castle
                     if (board.bqscr &&
@@ -1543,7 +1548,7 @@ class genMove {
                         move.enPassant = false;
                         move.castle = true;
 
-                        board.moveHistory[count++] = move;
+                        moves[count++] = move;
                     }
                 }
             }
@@ -1597,15 +1602,14 @@ int main() {
 
     board.initBoard();
 
-    // In main(), after board.initBoard():
-    uint64_t testAttacks = board.getrookAttacks(0, 0);  // Rook on a1 with empty board
-    std::cout << "Rook attacks from a1 (empty board): " << std::hex << testAttacks << std::dec << "\n";
-    board.LongPrint(testAttacks);
-
     genMove genMove(board);
     std::cout << genMove.perft(1) << std::endl;
     std::cout << genMove.perft(2) << std::endl;
     std::cout << genMove.perft(3) << std::endl;
+    std::cout << genMove.perft(4) << std::endl;
+    std::cout << genMove.perft(5) << std::endl;
+    std::cout << genMove.perft(6) << std::endl;
+    
     //std::cout << genMove.generateMoves() << std::endl;
 
     return 0;

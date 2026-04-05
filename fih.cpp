@@ -890,55 +890,23 @@ class genMove {
         genMove(Board& board) : board(board) {}
         
 
-        void perftDivide(int depth) {
-            int count = generateMoves();  // Fills moveHistory[0..count-1]
-            Move localMoves[256];
-            for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
-            
-            int total = 0;
-            for (int i = 0; i < count; i++) {
-                board.makeMove(localMoves[i]);
-                bool inCheck = board.isInCheck(board.moving);  // FIXED: check current side
-                
-                // print every move regardless of legality
-                std::cout << squareName(localMoves[i].from) 
-                        << squareName(localMoves[i].to)
-                        << " inCheck: " << inCheck << "\n";
-                
-                if (!inCheck) {
-                    int nodes = perft(depth - 1);
-                    total += nodes;
-                }
-                board.unmakeMove();
-            }
-            std::cout << "Total: " << total << "\n";
-        }
-
         int perft(int depth) {
             if (depth == 0) return 1;
             
-            int count = generateMoves();  // Fills moveHistory[0..count-1]
+            int count = generateMoves();
             Move localMoves[256];
             for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
             
             int nodes = 0;
             for (int i = 0; i < count; i++) {
                 board.makeMove(localMoves[i]);
-                if (!board.isInCheck(board.moving)) {  // FIXED: check current side
+                if (!board.isInCheck(1 - board.moving)) {
                     nodes += perft(depth - 1);
                 }
                 board.unmakeMove();
             }
             return nodes;
         }
-
-        std::string squareName(int sq) {
-            std::string s = "";
-            s += (char)('a' + sq % 8);
-            s += (char)('1' + sq / 8);
-            return s;
-        }
-
 
         int generateMoves() {
             int count = 0;
@@ -957,7 +925,7 @@ class genMove {
                     int from = __builtin_ctzll(pawns);
                     pawns &= pawns - 1;
 
-                    uint64_t singlePush = (1ULL << from << 8) & ~board.getOccupancy();
+                    uint64_t singlePush = ((1ULL << from) << 8) & ~board.getOccupancy();
                     uint64_t doublePush = ((singlePush & rank3Mask) << 8) & ~board.getOccupancy();
                     uint64_t attacks = board.pawnAttacksW[from] & board.getOccupancyBlack();
 
@@ -1275,7 +1243,7 @@ class genMove {
                     int from = __builtin_ctzll(pawns);
                     pawns &= pawns - 1;
 
-                    uint64_t singlePush = (1ULL << from >> 8) & ~board.getOccupancy();
+                    uint64_t singlePush = ((1ULL << from) >> 8) & ~board.getOccupancy();
                     uint64_t doublePush = ((singlePush & rank6Mask) >> 8) & ~board.getOccupancy();
                     uint64_t attacks = board.pawnAttacksB[from] & board.getOccupancyWhite();
 
@@ -1629,36 +1597,15 @@ int main() {
 
     board.initBoard();
 
-    // debug block
-    {
-        genMove gm(board);
-        Move localMoves[256];  // declare it here
-        int count = gm.generateMoves();
-        for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
-        
-        board.makeMove(localMoves[3]);
-        
-        int sq = __builtin_ctzll(board.wKing);
-        uint64_t occ = board.getOccupancy();
-        
-        std::cout << "king sq: " << sq << "\n";
-        std::cout << "rook+queen check: " << (((board.getrookAttacks(sq, occ) | board.getbishopAttacks(sq, occ)) & board.bQueen) > 0) << "\n";
-        std::cout << "rook check: "       << ((board.getrookAttacks(sq, occ) & board.bRook) > 0) << "\n";
-        std::cout << "bishop check: "     << ((board.getbishopAttacks(sq, occ) & board.bBishop) > 0) << "\n";
-        std::cout << "knight check: "     << ((board.knightAttacks[sq] & board.bKnight) > 0) << "\n";
-        std::cout << "pawn check: "       << ((board.pawnAttacksW[sq] & board.bPawns) > 0) << "\n";
-        
-        std::cout << "rook attacks from king:\n";
-        board.LongPrint(board.getrookAttacks(sq, occ));
-        std::cout << "bRook:\n";
-        board.LongPrint(board.bRook);
-        
-        board.unmakeMove();
-    }
-
+    // In main(), after board.initBoard():
+    uint64_t testAttacks = board.getrookAttacks(0, 0);  // Rook on a1 with empty board
+    std::cout << "Rook attacks from a1 (empty board): " << std::hex << testAttacks << std::dec << "\n";
+    board.LongPrint(testAttacks);
 
     genMove genMove(board);
-    genMove.perftDivide(3);
+    std::cout << genMove.perft(1) << std::endl;
+    std::cout << genMove.perft(2) << std::endl;
+    std::cout << genMove.perft(3) << std::endl;
     //std::cout << genMove.generateMoves() << std::endl;
 
     return 0;

@@ -30,7 +30,7 @@ class Board {
         bool bkscr = false; // black king side castling rights
         bool bqscr = false; // black queen side castling rights
         int enpassent_square = -1; //-1 mean no enpassent
-        int halfmove_clock = 0;
+        int halfmove_clock = 0; //half move clock i guess?
 
         //Attack BitBoards
         uint64_t pawnAttacksW[64] = {0};
@@ -69,7 +69,6 @@ class Board {
             0x280001040802101ULL,  0x2100190040002085ULL, 0x80c0084100102001ULL, 0x4024081001000421ULL,
             0x20030a0244872ULL,    0x12001008414402ULL,   0x2006104900a0804ULL,  0x1004081002402ULL
         };
-
         
         uint64_t bishopMagics[64] = { // Bishop magic numbers [64]
             0x40040844404084ULL,   0x2004208a004208ULL,   0x10190041080202ULL,   0x108060845042010ULL,
@@ -90,8 +89,7 @@ class Board {
             0x28000010020204ULL,   0x6000020202d0240ULL,   0x8918844842082200ULL, 0x4010011029020020ULL
         };
 
-        //Rook shift amounts [64] (64 - number of relevant occupancy bits)
-        int rookShifts[64] = {
+        int rookShifts[64] = { //Rook shift amounts [64] (64 - number of relevant occupancy bits)
             52, 53, 53, 53, 53, 53, 53, 52,
             53, 54, 54, 54, 54, 54, 54, 53,
             53, 54, 54, 54, 54, 54, 54, 53,
@@ -102,8 +100,7 @@ class Board {
             52, 53, 53, 53, 53, 53, 53, 52
         };
 
-        //Bishop shift amounts [64] (64 - number of relevant occupancy bits)
-        int bishopShifts[64] = {
+        int bishopShifts[64] = { //Bishop shift amounts [64] (64 - number of relevant occupancy bits)
             58, 59, 59, 59, 59, 59, 59, 58,
             59, 59, 59, 59, 59, 59, 59, 59,
             59, 59, 57, 57, 57, 57, 59, 59,
@@ -145,9 +142,26 @@ class Board {
         }
 
         bool isInCheck(int moving) {
-            //put a piece like the rook/bishop/queen on the kings square and see if there are any of those piece on the raycast if so the king is in check, for pawns just check one diagonal, knights also simple
-            //i need to make the magic bitboards though first.......
-            return false;
+            bool inCheck = false;
+            int sq = 0;
+            uint64_t occ = getOccupancy();
+            if (moving == 0) {
+                sq = __builtin_ctzll(wKing);
+                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & bQueen > 0) { return true; }
+                else if ((getrookAttacks(sq, occ)) & bRook > 0) { return true; }
+                else if ((getbishopAttacks(sq, occ)) & bBishop > 0) { return true; }
+                else if ((knightAttacks(sq) & bKnight) > 0) { return true; }
+                else if ((pawnAttacksW(sq) & bPawns) > 0) { return true; }
+            }
+            else if (moving == 1) {
+                sq = __builtin_ctzll(bKing);
+                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & wQueen > 0) { return true; }
+                else if ((getrookAttacks(sq, occ)) & wRook > 0) { return true; }
+                else if ((getbishopAttacks(sq, occ)) & wBishop > 0) { return true; }
+                else if ((knightAttacks(sq) & wKnight) > 0) { return true; }
+                else if ((pawnAttacksB(sq) & wPawns) > 0) { return true; }
+            }
+            else { std::cerr << "Error in isInCheck moving is " << moving << "\n"; }
         }
 
         void makeMove(Move move) {

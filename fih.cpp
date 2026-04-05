@@ -890,25 +890,22 @@ class genMove {
         genMove(Board& board) : board(board) {}
         
 
-        uint64_t perft(int depth) {
+       uint64_t perft(int depth) {
             if (depth == 0) return 1;
 
             uint64_t nodes = 0;
+            Move moves[256];
+            int count = generateMoves(moves);
 
-            Move moves[256];                  // temporary move list
-            int count = generateMoves(moves); // fill it
-
+            int us = board.moving;  // store side to move
             for (int i = 0; i < count; i++) {
                 board.makeMove(moves[i]);
 
-                // only count legal moves (king not left in check)
-                if (!board.isInCheck(1 - board.moving)) {
+                if (!board.isInCheck(us))   // check if move leaves king safe
                     nodes += perft(depth - 1);
-                }
 
                 board.unmakeMove();
             }
-
             return nodes;
         }
 

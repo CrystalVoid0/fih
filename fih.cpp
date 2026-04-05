@@ -142,7 +142,6 @@ class Board {
         }
 
         bool isInCheck(int moving) {
-            bool inCheck = false;
             int sq = 0;
             uint64_t occ = getOccupancy();
             if (moving == 0) {
@@ -162,6 +161,26 @@ class Board {
                 else if ((pawnAttacksB[sq] & wPawns) > 0) { return true; }
             }
             else { std::cerr << "Error in isInCheck moving is " << moving << "\n";}
+            return false;
+        }
+
+        bool isAttacked(int sq, int moving) {
+            uint64_t occ = getOccupancy();
+            if (moving == 0) {
+                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & bQueen > 0) { return true; }
+                else if ((getrookAttacks(sq, occ)) & bRook > 0) { return true; }
+                else if ((getbishopAttacks(sq, occ)) & bBishop > 0) { return true; }
+                else if ((knightAttacks[sq] & bKnight) > 0) { return true; }
+                else if ((pawnAttacksW[sq] & bPawns) > 0) { return true; }
+            }
+            else if (moving == 1) {
+                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & wQueen > 0) { return true; }
+                else if ((getrookAttacks(sq, occ)) & wRook > 0) { return true; }
+                else if ((getbishopAttacks(sq, occ)) & wBishop > 0) { return true; }
+                else if ((knightAttacks[sq] & wKnight) > 0) { return true; }
+                else if ((pawnAttacksB[sq] & wPawns) > 0) { return true; }
+            }
+            else { std::cerr << "Error in isAttacked() moving is " << moving << "\n";}
             return false;
         }
 
@@ -702,12 +721,12 @@ class Board {
                     if (c >= '0' && c <= '9') { //only simple way to convert char to nums without a libary
                         int num = c - '0';
                         for (int j = 0; j < num; j++) {
-                            board[row][col] = 0;
+                            board[7 - row][col] = 0;
                             col++;
                         }
                         continue;
                     }
-                    if (fenMap.count(c)) { board[row][col] = fenMap.at(c); col++; }
+                    if (fenMap.count(c)) { board[7- row][col] = fenMap.at(c); col++; }
                 }
                 if (c == ' ') {space_counter++; continue;}
                 if (col == 8 && row == 7) { done_with_board = true; continue; }
@@ -731,7 +750,7 @@ class Board {
                         i++; // move to next char, which should be rank
                         if (i < fen.size() && fen[i] >= '1' && fen[i] <= '8') {
                             int rank = fen[i] - '1';       // 0–7
-                            enpassent_square = rank * 8 + file;
+                            enpassent_square = (7 - rank) * 8 + file;
                         } else {
                             std::cerr << "Invalid en passant square in FEN!\n";
                             enpassent_square = -1;
@@ -775,7 +794,7 @@ class Board {
             for (int row = 0; row < 8; row++) {
                 std::cout << BORDER << (8 - row) << " ║" << RESET;
                 for (int col = 0; col < 8; col++) {
-                    int piece = board[row][col];
+                    int piece = board[7- row][col];
                     int absPiece = piece < 0 ? -piece : piece;
                     if (piece > 0)      std::cout << LIGHT_ORANGE << " " << pieces.at(absPiece) << " " << RESET;
                     else if (piece < 0) std::cout << DARK_ORANGE  << " " << pieces.at(absPiece) << " " << RESET;
@@ -891,9 +910,697 @@ class Board {
         }              
 };
 
+class genMove {
+    public:
+        Board& board;
+        genMove(Board& board) : board(board) {}
+
+
+        int perft(int depth) {
+            if (depth == 0) return 1;
+            
+            int count = generateMoves();
+            int nodes = 0;
+
+            for (int i = 0; i < count; i++) {
+                board.makeMove(board.moveHistory[i]);
+                
+                if (!board.isInCheck(1 - board.moving)) {
+                    nodes += perft(depth - 1);
+                }
+
+                board.unmakeMove();
+            }
+            return nodes;
+        }
+
+        int generateMoves() {
+            int count = 0;
+            uint64_t rank3Mask = 0x0000000000FF0000ULL;
+            uint64_t rank6Mask = 0x0000FF0000000000ULL;
+            uint64_t occ = board.getOccupancy();
+            if (board.moving == 0) {
+                uint64_t pawns = board.wPawns;
+                uint64_t bishops = board.wBishop; //done
+                uint64_t knights = board.wKnight; //done
+                uint64_t rooks = board.wRook;   //done
+                uint64_t queens = board.wQueen; //done
+                uint64_t king = board.wKing;  //done
+
+                while (pawns) {
+                    int from = __builtin_ctzll(pawns);
+                    pawns &= pawns - 1;
+
+                    uint64_t singlePush = (1ULL << from << 8) & ~board.getOccupancy();
+                    uint64_t doublePush = ((singlePush & rank3Mask) << 8) & ~board.getOccupancy();
+                    uint64_t attacks = board.pawnAttacksW[from] & board.getOccupancyBlack();
+
+                    uint64_t ep = 0;
+                    if (board.enpassent_square != -1) {
+                        ep = board.pawnAttacksW[from] & (1ULL << board.enpassent_square);
+                        if (ep != 0) {
+                            Move move;
+                            move.from = from;
+                            move.to = board.enpassent_square;
+                            move.piece = 1;
+                            move.captured = -1;
+                            move.promotion = 0;
+                            move.enPassant = true;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;
+                        }
+                    }
+
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+
+                        if (to / 8 != 7) {
+                            Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = 0;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;
+                        }
+                        //promotion logic
+                        else if (to / 8 == 7){
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = 2;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = 3;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = 4;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = 5;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+                        }
+                    }
+
+                    while (singlePush) {
+                        int to = __builtin_ctzll(singlePush);
+                        singlePush &= singlePush - 1;
+                        
+                        if (to / 8 != 7) {
+                            Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = 0;
+                            move.promotion = 0;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;
+                        }
+
+                        //promotion logic
+                        else if (to / 8 == 7) {
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = 0;
+                            move.promotion = 2;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = 0;
+                            move.promotion = 3;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = 0;
+                            move.promotion = 4;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = 1;
+                            move.captured = 0;
+                            move.promotion = 5;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+                        }
+                    }
+
+                    while (doublePush) {
+                        int to = __builtin_ctzll(doublePush);
+                        doublePush &= doublePush - 1;
+
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = 1;
+                        move.captured = 0;
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (knights) {
+                    int from = __builtin_ctzll(knights);
+                    knights &= knights - 1;
+
+                    uint64_t attacks = board.knightAttacks[from] & ~board.getOccupancyWhite();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = 2;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (bishops) {
+                    int from = __builtin_ctzll(bishops);
+                    bishops &= bishops - 1;
+
+                    uint64_t attacks = board.getbishopAttacks(from, occ) & ~board.getOccupancyWhite();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = 3;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (rooks) {
+                    int from = __builtin_ctzll(rooks);
+                    rooks &= rooks - 1;
+
+                    uint64_t attacks = board.getrookAttacks(from, occ) & ~board.getOccupancyWhite();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = 4;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (queens) {
+                    int from = __builtin_ctzll(queens);
+                    queens &= queens - 1;
+
+                    uint64_t attacks = (board.getrookAttacks(from, occ) | board.getbishopAttacks(from, occ)) & ~board.getOccupancyWhite();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = 5;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (king) {
+                    int from = __builtin_ctzll(king);
+                    king &= king - 1;
+
+                    uint64_t attacks = board.kingAttacks[from] & ~board.getOccupancyWhite();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = 6;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+
+                    //handle kingside castle
+                    if (board.wkscr &&
+                        getPieceAt(5) == 0 && getPieceAt(6) == 0 &&
+                        !board.isAttacked(4, 1) && !board.isAttacked(5, 1) && !board.isAttacked(6, 1)) {
+                        Move move;
+                        move.from = from;
+                        move.to = 6;
+                        move.piece = 6;
+                        move.captured = 0;
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = true;
+
+                        board.moveHistory[count++] = move;
+                    }
+                    //handle queenside castle
+                    if (board.wqscr &&
+                        getPieceAt(1) == 0 && getPieceAt(2) == 0 && getPieceAt(3) == 0 &&
+                        !board.isAttacked(2, 1) && !board.isAttacked(3, 1) && !board.isAttacked(4, 1)) {
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = 2;
+                        move.piece = 6;
+                        move.captured = 0;
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = true;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+            }
+
+            //black
+            else if (board.moving == 1) {
+                uint64_t pawns = board.bPawns; //done
+                uint64_t bishops = board.bBishop; //done
+                uint64_t knights = board.bKnight; //done
+                uint64_t rooks = board.bRook;   //done
+                uint64_t queens = board.bQueen; //done
+                uint64_t king = board.bKing;  //done
+
+                while (pawns) {
+                    int from = __builtin_ctzll(pawns);
+                    pawns &= pawns - 1;
+
+                    uint64_t singlePush = (1ULL >> from << 8) & ~board.getOccupancy();
+                    uint64_t doublePush = ((singlePush & rank6Mask) >> 8) & ~board.getOccupancy();
+                    uint64_t attacks = board.pawnAttacksB[from] & board.getOccupancyWhite();
+
+                    uint64_t ep = 0;
+                    if (board.enpassent_square != -1) {
+                        ep = board.pawnAttacksB[from] & (1ULL << board.enpassent_square);
+                        if (ep != 0) {
+                            Move move;
+                            move.from = from;
+                            move.to = board.enpassent_square;
+                            move.piece = -1;
+                            move.captured = 1;
+                            move.promotion = 0;
+                            move.enPassant = true;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;
+                        }
+                    }
+
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+
+                        if (to / 8 != 0) {
+                            Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = 0;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;
+                        }
+                        //promotion logic
+                        else if (to / 8 == 0){
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = -2;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = -3;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = -4;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = getPieceAt(to);
+                            move.promotion = -5;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+                        }
+                    }
+
+                    while (singlePush) {
+                        int to = __builtin_ctzll(singlePush);
+                        singlePush &= singlePush - 1;
+                        
+                        if (to / 8 != 0) {
+                            Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = 0;
+                            move.promotion = 0;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;
+                        }
+
+                        //promotion logic
+                        else if (to / 8 == 0) {
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = 0;
+                            move.promotion = -2;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = 0;
+                            move.promotion = -3;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = 0;
+                            move.promotion = -4;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+
+                            {Move move;
+                            move.from = from;
+                            move.to = to;
+                            move.piece = -1;
+                            move.captured = 0;
+                            move.promotion = -5;
+                            move.enPassant = false;
+                            move.castle = false;
+
+                            board.moveHistory[count++] = move;}
+                        }
+                    }
+
+                    while (doublePush) {
+                        int to = __builtin_ctzll(doublePush);
+                        doublePush &= doublePush - 1;
+
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = -1;
+                        move.captured = 0;
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (knights) {
+                    int from = __builtin_ctzll(knights);
+                    knights &= knights - 1;
+
+                    uint64_t attacks = board.knightAttacks[from] & ~board.getOccupancyBlack();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = -2;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (bishops) {
+                    int from = __builtin_ctzll(bishops);
+                    bishops &= bishops - 1;
+
+                    uint64_t attacks = board.getbishopAttacks(from, occ) & ~board.getOccupancyBlack();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = -3;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (rooks) {
+                    int from = __builtin_ctzll(rooks);
+                    rooks &= rooks - 1;
+
+                    uint64_t attacks = board.getrookAttacks(from, occ) & ~board.getOccupancyBlack();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = -4;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (queens) {
+                    int from = __builtin_ctzll(queens);
+                    queens &= queens - 1;
+
+                    uint64_t attacks = (board.getrookAttacks(from, occ) | board.getbishopAttacks(from, occ)) & ~board.getOccupancyBlack();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = -5;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+                while (king) {
+                    int from = __builtin_ctzll(king);
+                    king &= king - 1;
+
+                    uint64_t attacks = board.kingAttacks[from] & ~board.getOccupancyBlack();
+                    while (attacks) {
+                        int to = __builtin_ctzll(attacks);
+                        attacks &= attacks - 1;
+
+                        Move move;
+                        move.from = from;
+                        move.to = to;
+                        move.piece = -6;
+                        move.captured = getPieceAt(to);
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = false;
+
+                        board.moveHistory[count++] = move;
+                    }
+
+                    //handle kingside castle
+                    if (board.bkscr &&
+                        getPieceAt(61) == 0 && getPieceAt(62) == 0 &&
+                        !board.isAttacked(60, 0) && !board.isAttacked(61, 0) && !board.isAttacked(62, 0)) {
+                        Move move;
+                        move.from = from;
+                        move.to = 62;
+                        move.piece = -6;
+                        move.captured = 0;
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = true;
+
+                        board.moveHistory[count++] = move;
+                    }
+                    //handle queenside castle
+                    if (board.bqscr &&
+                        getPieceAt(57) == 0 && getPieceAt(58) == 0 && getPieceAt(59) == 0 &&
+                        !board.isAttacked(58, 0) && !board.isAttacked(59, 0) && !board.isAttacked(60, 0)) {
+                        
+                        Move move;
+                        move.from = from;
+                        move.to = 58;
+                        move.piece = -6;
+                        move.captured = 0;
+                        move.promotion = 0;
+                        move.enPassant = false;
+                        move.castle = true;
+
+                        board.moveHistory[count++] = move;
+                    }
+                }
+            }
+            return count;
+        }
+
+        int getPieceAt(int sq) {
+            uint64_t bit = 1ULL << sq;
+            if (board.wPawns & bit)  return 1;
+            if (board.wKnight & bit) return 2;
+            if (board.wBishop & bit) return 3;
+            if (board.wRook & bit)   return 4;
+            if (board.wQueen & bit)  return 5;
+            if (board.wKing & bit)   return 6;
+            if (board.bPawns & bit)  return -1;
+            if (board.bKnight & bit) return -2;
+            if (board.bBishop & bit) return -3;
+            if (board.bRook & bit)   return -4;
+            if (board.bQueen & bit)  return -5;
+            if (board.bKing & bit)   return -6;
+            return 0;
+        }
+
+    private:
+
+};
+
+
 int main() {
     Board board;
-
+    
     std::cout << "\033[38;2;255;179;102m";
     std::cout << "           ███████╗██╗██╗  ██╗\n";
     std::cout << "           ██╔════╝██║██║  ██║\n";
@@ -915,5 +1622,14 @@ int main() {
     board.printBoard(board.board);
 
     board.initBoard();
+    genMove genMove(board);
+    std::cout << "perft 1: " << genMove.perft(1) << "\n";
+    std::cout << "perft 2: " << genMove.perft(2) << "\n";
+    std::cout << "perft 3: " << genMove.perft(3) << "\n";
+    std::cout << "perft 4: " << genMove.perft(4) << "\n";
+    std::cout << "perft 5: " << genMove.perft(5) << "\n";
+    std::cout << "perft 6: " << genMove.perft(6) << "\n";
+    //std::cout << genMove.generateMoves() << std::endl;
+
     return 0;
 }

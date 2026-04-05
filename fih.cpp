@@ -41,7 +41,6 @@ class Board {
         //Masks
         uint64_t rookMasks[64] = {0};
         uint64_t bishopMasks[64] = {0};
-        uint64_t queenMask[64] = {0};
 
         //Rook and bishops offset bit
         int rookOffsets[64];
@@ -138,7 +137,7 @@ class Board {
         //Saftey feature probably will get romved later on
         bool initABBran = false;
 
-        //init function
+        //init function for Board class
         void initBoard() {
             initPieces();
             initAttackBitBoards();
@@ -147,6 +146,7 @@ class Board {
 
         bool isInCheck(int moving) {
             //put a piece like the rook/bishop/queen on the kings square and see if there are any of those piece on the raycast if so the king is in check, for pawns just check one diagonal, knights also simple
+            //i need to make the magic bitboards though first.......
             return false;
         }
 
@@ -526,12 +526,29 @@ class Board {
             boardToBitBoard(board); //Converet the int[8][8] board to 12 different bit boards
         }
 
+        uint64_t getrookAttacks(int sq, uint64_t occ) {
+            occ &= rookMasks[sq];
+            occ *= rookMagics[sq];
+            occ >>= rookShifts[sq];
+            return rookAttacks[rookOffsets[sq] + occ];
+        }
+
+        uint64_t getbishopAttacks(int sq, uint64_t occ) {
+            occ &= bishopMasks[sq];
+            occ *= bishopMagics[sq];
+            occ >>= bishopShifts[sq];
+            return bishopAttacks[bishopOffsets[sq] + occ];
+        }
+
         void initSlidingPieceAttackTB() {
             //Make the two offest tables
             rookOffsets[0] = 0;
             bishopOffsets[0] = 0;
             for (int i = 1; i < 64; i++) { rookOffsets[i] = rookOffsets[i - 1] + (1ULL << (64 - rookShifts[i - 1])); }
             for (int i = 1; i < 64; i++) { bishopOffsets[i] = bishopOffsets[i - 1] + (1ULL << (64 - bishopShifts[i - 1])); }
+
+            fillRookAttacks();
+            fillBishopAttacks();
         }
 
         void initAttackBitBoards() {
@@ -594,7 +611,7 @@ class Board {
                 temp_knight(i, squares_knight);
             }
 
-            //Rook, Bishops, Queens Masks
+            //Rook, Bishops Masks
             for (int i = 0; i < 64; i++) { //Rooks
                 int r = i / 8;
                 int f = i % 8;  
@@ -609,14 +626,11 @@ class Board {
                 int r = i / 8;
                 int f = i % 8;
                 uint64_t temp_mask = 0;
-                for (int tr = r + 1, tf = f + 1; tr <= 6 && tf <= 6; tr++, tf++) temp_mask |= 1ULL << (tr * 8 + tf); // up-right
-                for (int tr = r + 1, tf = f - 1; tr <= 6 && tf >= 1; tr++, tf--) temp_mask |= 1ULL << (tr * 8 + tf); // up-left
-                for (int tr = r - 1, tf = f + 1; tr >= 1 && tf <= 6; tr--, tf++) temp_mask |= 1ULL << (tr * 8 + tf); // down-right
-                for (int tr = r - 1, tf = f - 1; tr >= 1 && tf >= 1; tr--, tf--) temp_mask |= 1ULL << (tr * 8 + tf); // down-left
+                for (int tr = r + 1, tf = f + 1; tr <= 6 && tf <= 6; tr++, tf++) temp_mask |= 1ULL << (tr * 8 + tf); 
+                for (int tr = r + 1, tf = f - 1; tr <= 6 && tf >= 1; tr++, tf--) temp_mask |= 1ULL << (tr * 8 + tf); 
+                for (int tr = r - 1, tf = f + 1; tr >= 1 && tf <= 6; tr--, tf++) temp_mask |= 1ULL << (tr * 8 + tf);
+                for (int tr = r - 1, tf = f - 1; tr >= 1 && tf >= 1; tr--, tf--) temp_mask |= 1ULL << (tr * 8 + tf);
                 bishopMasks[i] = temp_mask;
-            }
-            for (int i = 0; i < 64; i++) { //Queen
-                queenMask[i] = rookMasks[i] | bishopMasks[i];
             }
         }
 
@@ -717,7 +731,7 @@ class Board {
             }
         }
 
-        // printBoard is the only function that was vibecoded since I hate messing with ascii :]
+        // printBoard is the only function that was vibecoded since I hate messing with ascii :] cry all you want
         void printBoard(int board_temp_val[8][8]) {
             static const std::unordered_map<int, const char*> pieces = {
                 {1, "P"}, 
@@ -773,8 +787,10 @@ class Board {
             }
             std::cout << "\n";
         }
+
     private:
         void temp_knight(int i, int squares_knight_temp[8]) {
+            //ungoldy readability ik right :}                                  i reallyyyyyy dont feel like fixing this
             uint64_t temp_val_knight_function = 1ULL << i;
             uint64_t temp_val_temp = temp_val_knight_function;
             if (squares_knight_temp[0] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function << 15; }
@@ -793,8 +809,71 @@ class Board {
             temp_val_knight_function = 1ULL << i;
             if (squares_knight_temp[7] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function << 6; }
             knightAttacks[i] = temp_val_temp & ~temp_val_knight_function;
-    }   
-                
+        }
+        
+        uint64_t indexToOccupancy(int index, int numBits, uint64_t mask) {
+            uint64_t occupancy = 0;
+            for (int i = 0; i < numBits; i++) {
+                int bitPos = __builtin_ctzll(mask);
+                mask &= mask - 1;
+                if (index & (1 << i)) { occupancy |= (1ULL << bitPos); }
+            }
+            return occupancy;
+        }
+        
+        uint64_t computeRookAttacks(int sq, uint64_t occ) {
+            uint64_t attacks = 0;
+            int r = sq / 8;
+            int f = sq % 8;
+
+            for (int i = r + 1; i <= 7; i++) { attacks |= (1ULL << (i * 8 + f)); if (occ & (1ULL << (i * 8 + f))) break; }
+            for (int i = r - 1; i >= 0; i--) { attacks |= (1ULL << (i * 8 + f)); if (occ & (1ULL << (i * 8 + f))) break; }
+            for (int j = f + 1; j <= 7; j++) { attacks |= (1ULL << (r * 8 + j)); if (occ & (1ULL << (r * 8 + j))) break; }
+            for (int j = f - 1; j >= 0; j--) { attacks |= (1ULL << (r * 8 + j)); if (occ & (1ULL << (r * 8 + j))) break; }
+
+            return attacks;
+        }
+
+        uint64_t computeBishopAttacks(int sq, uint64_t occ) {
+            uint64_t attacks = 0;
+            int r = sq / 8;
+            int f = sq % 8;
+
+            for (int tr = r + 1, tf = f + 1; tr <= 7 && tf <= 7; tr++, tf++) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+            for (int tr = r + 1, tf = f - 1; tr <= 7 && tf >= 0; tr++, tf--) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+            for (int tr = r - 1, tf = f + 1; tr >= 0 && tf <= 7; tr--, tf++) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+            for (int tr = r - 1, tf = f - 1; tr >= 0 && tf >= 0; tr--, tf--) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+
+            return attacks;
+        }
+
+        void fillRookAttacks() {
+            for (int sq = 0; sq < 64; sq++) {
+                int numBits = 64 - rookShifts[sq];
+                int numConfigs = 1 << numBits;
+
+                for (int index = 0; index < numConfigs; index++) {
+                    uint64_t occ = indexToOccupancy(index, numBits, rookMasks[sq]);
+                    uint64_t magicIndex = (occ * rookMagics[sq]) >> rookShifts[sq];
+                    uint64_t attacks = computeRookAttacks(sq, occ);
+                    rookAttacks[rookOffsets[sq] + magicIndex] = attacks;
+                }
+            }
+        }
+
+        void fillBishopAttacks() {
+            for (int sq = 0; sq < 64; sq++) {
+                int numBits = 64 - bishopShifts[sq];
+                int numConfigs = 1 << numBits;
+
+                for (int index = 0; index < numConfigs; index++) {
+                    uint64_t occ = indexToOccupancy(index, numBits, bishopMasks[sq]);
+                    uint64_t magicIndex = (occ * bishopMagics[sq]) >> bishopShifts[sq];
+                    uint64_t attacks = computeBishopAttacks(sq, occ);
+                    bishopAttacks[bishopOffsets[sq] + magicIndex] = attacks;
+                }
+            }
+        }              
 };
 
 int main() {
@@ -822,8 +901,5 @@ int main() {
 
     board.initBoard();
 
-    std::cout << board.bishopOffsets[63];
     return 0;
 }
-
-//git test hi ~-~

@@ -128,8 +128,8 @@ class Board {
 
         //Move Histoy related variables
         int HistoryIndex = 0;   
-        Move moveHistory[512];
-        BoardState stateHistory[512];
+        Move moveHistory[4096];
+        BoardState stateHistory[4096];
 
         //Saftey feature probably will get romved later on
         bool initABBran = false;
@@ -891,14 +891,14 @@ class genMove {
         
 
         void perftDivide(int depth) {
-            int count = generateMoves();
+            int count = generateMoves();  // Fills moveHistory[0..count-1]
             Move localMoves[256];
             for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
             
             int total = 0;
             for (int i = 0; i < count; i++) {
                 board.makeMove(localMoves[i]);
-                bool inCheck = board.isInCheck(1 - board.moving);
+                bool inCheck = board.isInCheck(board.moving);  // FIXED: check current side
                 
                 // print every move regardless of legality
                 std::cout << squareName(localMoves[i].from) 
@@ -914,6 +914,24 @@ class genMove {
             std::cout << "Total: " << total << "\n";
         }
 
+        int perft(int depth) {
+            if (depth == 0) return 1;
+            
+            int count = generateMoves();  // Fills moveHistory[0..count-1]
+            Move localMoves[256];
+            for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
+            
+            int nodes = 0;
+            for (int i = 0; i < count; i++) {
+                board.makeMove(localMoves[i]);
+                if (!board.isInCheck(board.moving)) {  // FIXED: check current side
+                    nodes += perft(depth - 1);
+                }
+                board.unmakeMove();
+            }
+            return nodes;
+        }
+
         std::string squareName(int sq) {
             std::string s = "";
             s += (char)('a' + sq % 8);
@@ -921,23 +939,6 @@ class genMove {
             return s;
         }
 
-        int perft(int depth) {
-            if (depth == 0) return 1;
-            
-            int count = generateMoves();
-            Move localMoves[256];
-            for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i]; // save them
-            
-            int nodes = 0;
-            for (int i = 0; i < count; i++) {
-                board.makeMove(localMoves[i]);  // use local copy
-                if (!board.isInCheck(1 - board.moving)) {
-                    nodes += perft(depth - 1);
-                }
-                board.unmakeMove();
-            }
-            return nodes;
-        }
 
         int generateMoves() {
             int count = 0;
@@ -1230,7 +1231,7 @@ class genMove {
                     //handle kingside castle
                     if (board.wkscr &&
                         getPieceAt(5) == 0 && getPieceAt(6) == 0 &&
-                        !board.isAttacked(4, 1) && !board.isAttacked(5, 1) && !board.isAttacked(6, 1)) {
+                        !board.isAttacked(4, 0) && !board.isAttacked(5, 0) && !board.isAttacked(6, 0)) {
                         Move move;
                         move.from = from;
                         move.to = 6;
@@ -1245,7 +1246,7 @@ class genMove {
                     //handle queenside castle
                     if (board.wqscr &&
                         getPieceAt(1) == 0 && getPieceAt(2) == 0 && getPieceAt(3) == 0 &&
-                        !board.isAttacked(2, 1) && !board.isAttacked(3, 1) && !board.isAttacked(4, 1)) {
+                        !board.isAttacked(2, 0) && !board.isAttacked(3, 0) && !board.isAttacked(4, 0)) {
                         
                         Move move;
                         move.from = from;
@@ -1548,7 +1549,7 @@ class genMove {
                     //handle kingside castle
                     if (board.bkscr &&
                         getPieceAt(61) == 0 && getPieceAt(62) == 0 &&
-                        !board.isAttacked(60, 0) && !board.isAttacked(61, 0) && !board.isAttacked(62, 0)) {
+                        !board.isAttacked(60, 1) && !board.isAttacked(61, 1) && !board.isAttacked(62, 1)) {
                         Move move;
                         move.from = from;
                         move.to = 62;
@@ -1563,7 +1564,7 @@ class genMove {
                     //handle queenside castle
                     if (board.bqscr &&
                         getPieceAt(57) == 0 && getPieceAt(58) == 0 && getPieceAt(59) == 0 &&
-                        !board.isAttacked(58, 0) && !board.isAttacked(59, 0) && !board.isAttacked(60, 0)) {
+                        !board.isAttacked(58, 1) && !board.isAttacked(59, 1) && !board.isAttacked(60, 1)) {
                         
                         Move move;
                         move.from = from;

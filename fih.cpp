@@ -136,7 +136,6 @@ class Board {
 
         //init function for Board class
         void initBoard() {
-            initPieces();
             initAttackBitBoards();
             initSlidingPieceAttackTB();
         }
@@ -146,19 +145,19 @@ class Board {
             uint64_t occ = getOccupancy();
             if (moving == 0) {
                 sq = __builtin_ctzll(wKing);
-                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & bQueen > 0) { return true; }
-                else if ((getrookAttacks(sq, occ)) & bRook > 0) { return true; }
-                else if ((getbishopAttacks(sq, occ)) & bBishop > 0) { return true; }
-                else if ((knightAttacks[sq] & bKnight) > 0) { return true; }
-                else if ((pawnAttacksW[sq] & bPawns) > 0) { return true; }
+                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & bQueen) > 0) { return true; }
+                else if (((getrookAttacks(sq, occ)) & bRook) > 0) { return true; }
+                else if (((getbishopAttacks(sq, occ)) & bBishop) > 0) { return true; }
+                else if (((knightAttacks[sq]) & bKnight) > 0) { return true; }
+                else if (((pawnAttacksW[sq]) & bPawns) > 0) { return true; }
             }
             else if (moving == 1) {
                 sq = __builtin_ctzll(bKing);
-                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & wQueen > 0) { return true; }
-                else if ((getrookAttacks(sq, occ)) & wRook > 0) { return true; }
-                else if ((getbishopAttacks(sq, occ)) & wBishop > 0) { return true; }
-                else if ((knightAttacks[sq] & wKnight) > 0) { return true; }
-                else if ((pawnAttacksB[sq] & wPawns) > 0) { return true; }
+                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & wQueen) > 0) { return true; }
+                else if (((getrookAttacks(sq, occ)) & wRook) > 0) { return true; }
+                else if (((getbishopAttacks(sq, occ)) & wBishop) > 0) { return true; }
+                else if (((knightAttacks[sq] & wKnight)) > 0) { return true; }
+                else if (((pawnAttacksB[sq] & wPawns)) > 0) { return true; }
             }
             else { std::cerr << "Error in isInCheck moving is " << moving << "\n";}
             return false;
@@ -167,18 +166,18 @@ class Board {
         bool isAttacked(int sq, int moving) {
             uint64_t occ = getOccupancy();
             if (moving == 0) {
-                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & bQueen > 0) { return true; }
-                else if ((getrookAttacks(sq, occ)) & bRook > 0) { return true; }
-                else if ((getbishopAttacks(sq, occ)) & bBishop > 0) { return true; }
-                else if ((knightAttacks[sq] & bKnight) > 0) { return true; }
-                else if ((pawnAttacksW[sq] & bPawns) > 0) { return true; }
+                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & bQueen) > 0) { return true; }
+                else if (((getrookAttacks(sq, occ)) & bRook) > 0) { return true; }
+                else if (((getbishopAttacks(sq, occ)) & bBishop) > 0) { return true; }
+                else if (((knightAttacks[sq]) & bKnight) > 0) { return true; }
+                else if (((pawnAttacksW[sq]) & bPawns) > 0) { return true; }
             }
             else if (moving == 1) {
-                if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & wQueen > 0) { return true; }
-                else if ((getrookAttacks(sq, occ)) & wRook > 0) { return true; }
-                else if ((getbishopAttacks(sq, occ)) & wBishop > 0) { return true; }
-                else if ((knightAttacks[sq] & wKnight) > 0) { return true; }
-                else if ((pawnAttacksB[sq] & wPawns) > 0) { return true; }
+                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & wQueen) > 0) { return true; }
+                else if (((getrookAttacks(sq, occ)) & wRook) > 0) { return true; }
+                else if (((getbishopAttacks(sq, occ)) & wBishop) > 0) { return true; }
+                else if (((knightAttacks[sq]) & wKnight) > 0) { return true; }
+                else if (((pawnAttacksB[sq]) & wPawns) > 0) { return true; }
             }
             else { std::cerr << "Error in isAttacked() moving is " << moving << "\n";}
             return false;
@@ -554,12 +553,6 @@ class Board {
             return bPawns | bBishop | bKnight | bRook | bQueen | bKing;
         }
 
-        void initPieces() {
-            wPawns = wBishop = wKnight = wRook = wQueen = wKing = 0;
-            bPawns = bBishop = bKnight = bRook = bQueen = bKing = 0;
-            boardToBitBoard(board); //Converet the int[8][8] board to 12 different bit boards
-        }
-
         uint64_t getrookAttacks(int sq, uint64_t occ) {
             occ &= rookMasks[sq];
             occ *= rookMagics[sq];
@@ -630,20 +623,8 @@ class Board {
                 }
                 else{ kingAttacks[i] = (temp_val >> 1 | temp_val << 1) | ((temp_val << 7 | temp_val << 8 | temp_val << 9) | (temp_val >> 7 | temp_val >> 8 | temp_val >> 9)); }
             }
-            //Knight 0 = TLCT || 1 = TRCT || 2 = TRCB || 3 = BRCT || 4 = BRCB || 5 = BLCB || 6 = BLCT || 7 = TLCB
-            for (int i = 0; i < 64; i++) {
-                temp_val = 1ULL << i;
-                int squares_knight[8] = {1, 1, 1, 1, 1, 1, 1, 1};
-                if (i >= 48 || i % 8 == 0) { squares_knight[0] = 0; }
-                if (i >= 48 || i % 8 == 7) { squares_knight[1] = 0; }
-                if (i >= 56 || i % 8 == 6 || i % 8 == 7) { squares_knight[2] = 0; }
-                if (i <= 15 || i % 8 == 7) { squares_knight[3] = 0; }
-                if (i <= 7  || i % 8 == 6 || i % 8 == 7) { squares_knight[4] = 0; }
-                if (i <= 15 || i % 8 == 7) { squares_knight[5] = 0; }
-                if (i <= 7  || i % 8 == 0 || i % 8 == 1) { squares_knight[6] = 0; }
-                if (i >= 56 || i % 8 == 0 || i % 8 == 1) { squares_knight[7] = 0; }
-                temp_knight(i, squares_knight);
-            }
+            //Knight
+            initKnightAttacks();
 
             //Rook, Bishops Masks
             for (int i = 0; i < 64; i++) { //Rooks
@@ -668,121 +649,96 @@ class Board {
             }
         }
 
-        void boardToBitBoard(int board[8][8]) {
-            for (int x = 0; x < 8; x++) {
-                for (int y = 0; y < 8; y++) {
-                    int piece = board[x][y];
-                    if (piece == 0) { continue; }
-                    else if (piece == 1) { wPawns |= (1ULL << (x*8 + y)); }
-                    else if (piece == 2) { wBishop |= (1ULL << (x*8 + y)); }
-                    else if (piece == 3) { wKnight |= (1ULL << (x*8 + y)); }
-                    else if (piece == 4) { wRook |= (1ULL << (x*8 + y)); }
-                    else if (piece == 5) { wQueen |= (1ULL << (x*8 + y)); }
-                    else if (piece == 6) { wKing |= (1ULL << (x*8 + y)); }
-
-                    else if (piece == -1) { bPawns |= (1ULL << (x*8 + y)); }
-                    else if (piece == -2) { bBishop |= (1ULL << (x*8 + y)); }
-                    else if (piece == -3) { bKnight |= (1ULL << (x*8 + y)); }
-                    else if (piece == -4) { bRook |= (1ULL << (x*8 + y)); }
-                    else if (piece == -5) { bQueen |= (1ULL << (x*8 + y)); }
-                    else if (piece == -6) { bKing |= (1ULL << (x*8 + y)); }
-                }
-            }
-        }
-
         void parseFen(std::string fen) {
-            const std::unordered_map<char, int> fenMap =
-            {
-                {'P', 1},
-                {'N', 2},
-                {'B', 3},
-                {'R', 4},
-                {'Q', 5},
-                {'K', 6},
-                {'p', -1},
-                {'n', -2},
-                {'b', -3},
-                {'r', -4},
-                {'q', -5},
-                {'k', -6},
-            };
-            int col = 0;
-            int row = 0;
-            enpassent_square = 0;
-            for (int i = 0; i < 8; i++)
-                for (int j = 0; j < 8; j++)
-                    board[i][j] = 0;
-            bool done_with_board = false;
-            int space_counter = 0;
-            for (int i = 0; i < fen.length(); i++) {
-                char c = fen[i];
-                if (done_with_board == false) {
-                    if (c == '/') {row += 1; col = 0; continue;}
-                    if (c >= '0' && c <= '9') { //only simple way to convert char to nums without a libary
-                        int num = c - '0';
-                        for (int j = 0; j < num; j++) {
-                            board[7 - row][col] = 0;
-                            col++;
-                        }
-                        continue;
+            // reset all bitboards
+            wPawns = wKnight = wBishop = wRook = wQueen = wKing = 0;
+            bPawns = bKnight = bBishop = bRook = bQueen = bKing = 0;
+            wkscr = wqscr = bkscr = bqscr = false;
+            enpassent_square = -1;
+            halfmove_clock = 0;
+            moving = 0;
+            HistoryIndex = 0;
+
+            int i = 0;
+
+            // --- section 1: piece placement ---
+            int rank = 7;
+            int file = 0;
+            while (i < fen.size() && fen[i] != ' ') {
+                char c = fen[i++];
+                if (c == '/') {
+                    rank--;
+                    file = 0;
+                }
+                else if (c >= '1' && c <= '8') {
+                    file += c - '0';
+                }
+                else {
+                    int sq = rank * 8 + file;
+                    uint64_t bit = 1ULL << sq;
+                    switch(c) {
+                        case 'P': wPawns  |= bit; break;
+                        case 'N': wKnight |= bit; break;
+                        case 'B': wBishop |= bit; break;
+                        case 'R': wRook   |= bit; break;
+                        case 'Q': wQueen  |= bit; break;
+                        case 'K': wKing   |= bit; break;
+                        case 'p': bPawns  |= bit; break;
+                        case 'n': bKnight |= bit; break;
+                        case 'b': bBishop |= bit; break;
+                        case 'r': bRook   |= bit; break;
+                        case 'q': bQueen  |= bit; break;
+                        case 'k': bKing   |= bit; break;
                     }
-                    if (fenMap.count(c)) { board[7- row][col] = fenMap.at(c); col++; }
+                    file++;
                 }
-                if (c == ' ') {space_counter++; continue;}
-                if (col == 8 && row == 7) { done_with_board = true; continue; }
-                if (space_counter == 1) {
-                    if (c == 'w') { moving = 0; }
-                    else if (c == 'b') { moving = 1; }
-                    else { std::cerr << "Invalid Fen String!" << std::endl; }
-                }
-                else if (space_counter == 2) {
-                    if (c == 'K') wkscr = true;
-                    if (c == 'Q') wqscr = true;
-                    if (c == 'k') bkscr = true;
-                    if (c == 'q') bqscr = true;
-                }
-                else if (space_counter == 3) {
-                    if (c == '-') {
-                        enpassent_square = -1;
-                    } else if (c >= 'a' && c <= 'h') {
-                        // store file temporarily
-                        int file = c - 'a'; // 0–7
-                        i++; // move to next char, which should be rank
-                        if (i < fen.size() && fen[i] >= '1' && fen[i] <= '8') {
-                            int rank = fen[i] - '1';       // 0–7
-                            enpassent_square = (7 - rank) * 8 + file;
-                        } else {
-                            std::cerr << "Invalid en passant square in FEN!\n";
-                            enpassent_square = -1;
-                        }
-                    } else {
-                        std::cerr << "Invalid en passant character in FEN!\n";
-                        enpassent_square = -1;
-                    }
-                }
-                else if (space_counter == 4) { halfmove_clock = halfmove_clock * 10 + (c - '0'); }
-                else if (space_counter == 5) { break; }
             }
+            i++; // skip space
+
+            // --- section 2: side to move ---
+            if (i < fen.size()) {
+                moving = (fen[i] == 'w') ? 0 : 1;
+                i++; // skip 'w' or 'b'
+                i++; // skip space
+            }
+
+            // --- section 3: castling rights ---
+            while (i < fen.size() && fen[i] != ' ') {
+                char c = fen[i++];
+                if (c == 'K') wkscr = true;
+                if (c == 'Q') wqscr = true;
+                if (c == 'k') bkscr = true;
+                if (c == 'q') bqscr = true;
+            }
+            i++; // skip space
+
+            // --- section 4: en passant ---
+            if (i < fen.size()) {
+                if (fen[i] == '-') {
+                    enpassent_square = -1;
+                    i++;
+                }
+                else if (fen[i] >= 'a' && fen[i] <= 'h') {
+                    int epFile = fen[i] - 'a';
+                    i++;
+                    int epRank = fen[i] - '1';
+                    i++;
+                    enpassent_square = epRank * 8 + epFile;
+                }
+                i++; // skip space
+            }
+
+            // --- section 5: halfmove clock ---
+            halfmove_clock = 0;
+            while (i < fen.size() && fen[i] != ' ' && fen[i] != '\0') {
+                halfmove_clock = halfmove_clock * 10 + (fen[i] - '0');
+                i++;
+            }
+            // section 6: fullmove number — skip, we don't use it
         }
 
         // printBoard is the only function that was vibecoded since I hate messing with ascii :] cry all you want
-        void printBoard(int board_temp_val[8][8]) {
-            static const std::unordered_map<int, const char*> pieces = {
-                {1, "P"}, 
-                {2, "N"}, 
-                {3, "B"}, 
-                {4, "R"}, 
-                {5, "Q"}, 
-                {6, "K"},
-                {-1, "P"}, 
-                {-2, "N"}, 
-                {-3, "B"}, 
-                {-4, "R"}, 
-                {-5, "Q"}, 
-                {-6, "K"},
-                {0, " "}
-            };
-
+        void printBoard() {
             const std::string LIGHT_ORANGE = "\033[38;2;255;200;130m";
             const std::string DARK_ORANGE  = "\033[38;2;180;90;20m";
             const std::string BORDER       = "\033[38;2;255;179;102m";
@@ -791,21 +747,39 @@ class Board {
             std::cout << BORDER << "   a   b   c   d   e   f   g   h\n";
             std::cout << "  ╔═══╦═══╦═══╦═══╦═══╦═══╦═══╦═══╗\n" << RESET;
 
-            for (int row = 0; row < 8; row++) {
-                std::cout << BORDER << (8 - row) << " ║" << RESET;
-                for (int col = 0; col < 8; col++) {
-                    int piece = board[7- row][col];
-                    int absPiece = piece < 0 ? -piece : piece;
-                    if (piece > 0)      std::cout << LIGHT_ORANGE << " " << pieces.at(absPiece) << " " << RESET;
-                    else if (piece < 0) std::cout << DARK_ORANGE  << " " << pieces.at(absPiece) << " " << RESET;
-                    else                std::cout << "   ";
+            for (int rank = 7; rank >= 0; rank--) {
+                std::cout << BORDER << (rank + 1) << " ║" << RESET;
+                for (int file = 0; file < 8; file++) {
+                    int sq = rank * 8 + file;
+                    uint64_t bit = 1ULL << sq;
+
+                    char piece = ' ';
+                    bool isWhite = false;
+                    if      (wPawns  & bit) { piece = 'P'; isWhite = true; }
+                    else if (wKnight & bit) { piece = 'N'; isWhite = true; }
+                    else if (wBishop & bit) { piece = 'B'; isWhite = true; }
+                    else if (wRook   & bit) { piece = 'R'; isWhite = true; }
+                    else if (wQueen  & bit) { piece = 'Q'; isWhite = true; }
+                    else if (wKing   & bit) { piece = 'K'; isWhite = true; }
+                    else if (bPawns  & bit) { piece = 'P'; isWhite = false; }
+                    else if (bKnight & bit) { piece = 'N'; isWhite = false; }
+                    else if (bBishop & bit) { piece = 'B'; isWhite = false; }
+                    else if (bRook   & bit) { piece = 'R'; isWhite = false; }
+                    else if (bQueen  & bit) { piece = 'Q'; isWhite = false; }
+                    else if (bKing   & bit) { piece = 'K'; isWhite = false; }
+
+                    if (piece != ' ') {
+                        if (isWhite) std::cout << LIGHT_ORANGE << " " << piece << " " << RESET;
+                        else         std::cout << DARK_ORANGE  << " " << piece << " " << RESET;
+                    } else {
+                        std::cout << "   ";
+                    }
                     std::cout << BORDER << "║" << RESET;
                 }
-                std::cout << BORDER << " " << (8 - row) << "\n";
-                if (row < 7)
+                std::cout << BORDER << " " << (rank + 1) << "\n";
+                if (rank > 0)
                     std::cout << BORDER << "  ╠═══╬═══╬═══╬═══╬═══╬═══╬═══╬═══╣\n" << RESET;
             }
-
             std::cout << BORDER << "  ╚═══╩═══╩═══╩═══╩═══╩═══╩═══╩═══╝\n";
             std::cout << "   a   b   c   d   e   f   g   h\n" << RESET;
         }
@@ -823,26 +797,26 @@ class Board {
         }
 
     private:
-        void temp_knight(int i, int squares_knight_temp[8]) {
-            //ungoldy readability ik right :}                                  i reallyyyyyy dont feel like fixing this
-            uint64_t temp_val_knight_function = 1ULL << i;
-            uint64_t temp_val_temp = temp_val_knight_function;
-            if (squares_knight_temp[0] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function << 15; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[1] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function << 17; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[2] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function << 10; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[3] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function >> 6; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[4] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function >> 15; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[5] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function >> 17; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[6] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function >> 10; }
-            temp_val_knight_function = 1ULL << i;
-            if (squares_knight_temp[7] == 1) {temp_val_temp = temp_val_temp | temp_val_knight_function << 6; }
-            knightAttacks[i] = temp_val_temp & ~temp_val_knight_function;
+        void initKnightAttacks() {
+            for (int sq = 0; sq < 64; sq++) {
+                knightAttacks[sq] = 0;
+                int r = sq / 8;
+                int f = sq % 8;
+
+                // all 8 possible knight moves as rank/file deltas
+                int moves[8][2] = {
+                    {2, 1}, {2, -1}, {-2, 1}, {-2, -1},
+                    {1, 2}, {1, -2}, {-1, 2}, {-1, -2}
+                };
+
+                for (int i = 0; i < 8; i++) {
+                    int tr = r + moves[i][0];
+                    int tf = f + moves[i][1];
+                    if (tr >= 0 && tr <= 7 && tf >= 0 && tf <= 7) {
+                        knightAttacks[sq] |= (1ULL << (tr * 8 + tf));
+                    }
+                }
+            }
         }
         
         uint64_t indexToOccupancy(int index, int numBits, uint64_t mask) {
@@ -914,21 +888,52 @@ class genMove {
     public:
         Board& board;
         genMove(Board& board) : board(board) {}
+        
 
+        void perftDivide(int depth) {
+            int count = generateMoves();
+            Move localMoves[256];
+            for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
+            
+            int total = 0;
+            for (int i = 0; i < count; i++) {
+                board.makeMove(localMoves[i]);
+                bool inCheck = board.isInCheck(1 - board.moving);
+                
+                // print every move regardless of legality
+                std::cout << squareName(localMoves[i].from) 
+                        << squareName(localMoves[i].to)
+                        << " inCheck: " << inCheck << "\n";
+                
+                if (!inCheck) {
+                    int nodes = perft(depth - 1);
+                    total += nodes;
+                }
+                board.unmakeMove();
+            }
+            std::cout << "Total: " << total << "\n";
+        }
+
+        std::string squareName(int sq) {
+            std::string s = "";
+            s += (char)('a' + sq % 8);
+            s += (char)('1' + sq / 8);
+            return s;
+        }
 
         int perft(int depth) {
             if (depth == 0) return 1;
             
             int count = generateMoves();
+            Move localMoves[256];
+            for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i]; // save them
+            
             int nodes = 0;
-
             for (int i = 0; i < count; i++) {
-                board.makeMove(board.moveHistory[i]);
-                
+                board.makeMove(localMoves[i]);  // use local copy
                 if (!board.isInCheck(1 - board.moving)) {
                     nodes += perft(depth - 1);
                 }
-
                 board.unmakeMove();
             }
             return nodes;
@@ -1269,7 +1274,7 @@ class genMove {
                     int from = __builtin_ctzll(pawns);
                     pawns &= pawns - 1;
 
-                    uint64_t singlePush = (1ULL >> from << 8) & ~board.getOccupancy();
+                    uint64_t singlePush = (1ULL << from >> 8) & ~board.getOccupancy();
                     uint64_t doublePush = ((singlePush & rank6Mask) >> 8) & ~board.getOccupancy();
                     uint64_t attacks = board.pawnAttacksB[from] & board.getOccupancyWhite();
 
@@ -1619,16 +1624,40 @@ int main() {
     if (input_fen_string == "") { input_fen_string = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; }
     std::cout << "\n";
     board.parseFen(input_fen_string);
-    board.printBoard(board.board);
+    board.printBoard();
 
     board.initBoard();
+
+    // debug block
+    {
+        genMove gm(board);
+        Move localMoves[256];  // declare it here
+        int count = gm.generateMoves();
+        for (int i = 0; i < count; i++) localMoves[i] = board.moveHistory[i];
+        
+        board.makeMove(localMoves[3]);
+        
+        int sq = __builtin_ctzll(board.wKing);
+        uint64_t occ = board.getOccupancy();
+        
+        std::cout << "king sq: " << sq << "\n";
+        std::cout << "rook+queen check: " << (((board.getrookAttacks(sq, occ) | board.getbishopAttacks(sq, occ)) & board.bQueen) > 0) << "\n";
+        std::cout << "rook check: "       << ((board.getrookAttacks(sq, occ) & board.bRook) > 0) << "\n";
+        std::cout << "bishop check: "     << ((board.getbishopAttacks(sq, occ) & board.bBishop) > 0) << "\n";
+        std::cout << "knight check: "     << ((board.knightAttacks[sq] & board.bKnight) > 0) << "\n";
+        std::cout << "pawn check: "       << ((board.pawnAttacksW[sq] & board.bPawns) > 0) << "\n";
+        
+        std::cout << "rook attacks from king:\n";
+        board.LongPrint(board.getrookAttacks(sq, occ));
+        std::cout << "bRook:\n";
+        board.LongPrint(board.bRook);
+        
+        board.unmakeMove();
+    }
+
+
     genMove genMove(board);
-    std::cout << "perft 1: " << genMove.perft(1) << "\n";
-    std::cout << "perft 2: " << genMove.perft(2) << "\n";
-    std::cout << "perft 3: " << genMove.perft(3) << "\n";
-    std::cout << "perft 4: " << genMove.perft(4) << "\n";
-    std::cout << "perft 5: " << genMove.perft(5) << "\n";
-    std::cout << "perft 6: " << genMove.perft(6) << "\n";
+    genMove.perftDivide(3);
     //std::cout << genMove.generateMoves() << std::endl;
 
     return 0;

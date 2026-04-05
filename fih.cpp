@@ -150,18 +150,19 @@ class Board {
                 if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & bQueen > 0) { return true; }
                 else if ((getrookAttacks(sq, occ)) & bRook > 0) { return true; }
                 else if ((getbishopAttacks(sq, occ)) & bBishop > 0) { return true; }
-                else if ((knightAttacks(sq) & bKnight) > 0) { return true; }
-                else if ((pawnAttacksW(sq) & bPawns) > 0) { return true; }
+                else if ((knightAttacks[sq] & bKnight) > 0) { return true; }
+                else if ((pawnAttacksW[sq] & bPawns) > 0) { return true; }
             }
             else if (moving == 1) {
                 sq = __builtin_ctzll(bKing);
                 if ((getrookAttacks(sq, occ) | getbishopAttacks(sq, occ)) & wQueen > 0) { return true; }
                 else if ((getrookAttacks(sq, occ)) & wRook > 0) { return true; }
                 else if ((getbishopAttacks(sq, occ)) & wBishop > 0) { return true; }
-                else if ((knightAttacks(sq) & wKnight) > 0) { return true; }
-                else if ((pawnAttacksB(sq) & wPawns) > 0) { return true; }
+                else if ((knightAttacks[sq] & wKnight) > 0) { return true; }
+                else if ((pawnAttacksB[sq] & wPawns) > 0) { return true; }
             }
-            else { std::cerr << "Error in isInCheck moving is " << moving << "\n"; }
+            else { std::cerr << "Error in isInCheck moving is " << moving << "\n";}
+            return false;
         }
 
         void makeMove(Move move) {
@@ -914,6 +915,5 @@ int main() {
     board.printBoard(board.board);
 
     board.initBoard();
-
     return 0;
 }

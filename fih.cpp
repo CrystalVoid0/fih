@@ -153,9 +153,6 @@ class Board {
 
             if (move.piece == 1 || move.piece == -1 || move.captured != 0) { halfmove_clock = 0;} 
             else {halfmove_clock++;}
-            
-            if (move.piece > 0) {side = 0;} 
-            else {side = 1;}
  
             //yes i know its a lot of switch staments :(
             switch(move.piece) { //remove moving piece from its square
@@ -299,7 +296,7 @@ class Board {
                     case 2:  wKnight &= ~(1ULL << move.to); break;
                     case -2: bKnight &= ~(1ULL << move.to); break;      
                 }
-                if (side == 0) wPawns |= (1ULL << move.from);
+                if (move.piece == 1) wPawns |= (1ULL << move.from);
                 else bPawns |= (1ULL << move.from);
             }
             else { //remove the piece from its destination square
@@ -320,37 +317,41 @@ class Board {
                     default: std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;
                 }
             }
-            switch(move.captured) { //add back any captured piece to the board
-                case 0: break;
-                case 1:  wPawns |= (1ULL << move.to); break;
-                case -1: bPawns |= (1ULL << move.to); break;
-                case 2:  wKnight |= (1ULL << move.to); break;
-                case -2: bKnight |= (1ULL << move.to); break;
-                case 3:  wBishop |= (1ULL << move.to); break;
-                case -3: bBishop |= (1ULL << move.to); break;
-                case 4:  wRook |= (1ULL << move.to); break;
-                case -4: bRook |= (1ULL << move.to); break;
-                case 5:  wQueen |= (1ULL << move.to); break;
-                case -5: bQueen |= (1ULL << move.to); break;
-                case 6:  wKing |= (1ULL << move.to); std::cerr << "tf why was the king captured?\n"; break; //I actually have no clue why this is here but might as well keep it just incase for now
-                case -6: bKing |= (1ULL << move.to); std::cerr << "tf why was the king captured?\n"; break;
-                default: std::cerr << "Uknown piece type in move.captured in unmakeMove(), value used -> " << move.captured << "\n";
-            }                
-            switch(move.piece) { //bring the moved piece back to its orginal square
-                case 1:  wPawns |= (1ULL << move.from); break;
-                case -1: bPawns |= (1ULL << move.from); break;
-                case 2:  wKnight |= (1ULL << move.from); break;
-                case -2: bKnight |= (1ULL << move.from); break;
-                case 3:  wBishop |= (1ULL << move.from); break;
-                case -3: bBishop |= (1ULL << move.from); break;
-                case 4:  wRook |= (1ULL << move.from); break;
-                case -4: bRook |= (1ULL << move.from); break;
-                case 5:  wQueen |= (1ULL << move.from); break;
-                case -5: bQueen |= (1ULL << move.from); break;
-                case 6:  wKing |= (1ULL << move.from); break;
-                case -6: bKing |= (1ULL << move.from); break;
-                case 0:  std::cerr << "Error in switch(move.piece) inside unmakeMove() no piece type 0 why the fuk is this shi making a move with no piece?"; break;
-                default: std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;   
+            if (!move.enPassant) {
+                switch(move.captured) { //add back any captured piece to the board
+                    case 0: break;
+                    case 1:  wPawns |= (1ULL << move.to); break;
+                    case -1: bPawns |= (1ULL << move.to); break;
+                    case 2:  wKnight |= (1ULL << move.to); break;
+                    case -2: bKnight |= (1ULL << move.to); break;
+                    case 3:  wBishop |= (1ULL << move.to); break;
+                    case -3: bBishop |= (1ULL << move.to); break;
+                    case 4:  wRook |= (1ULL << move.to); break;
+                    case -4: bRook |= (1ULL << move.to); break;
+                    case 5:  wQueen |= (1ULL << move.to); break;
+                    case -5: bQueen |= (1ULL << move.to); break;
+                    case 6:  wKing |= (1ULL << move.to); std::cerr << "tf why was the king captured?\n"; break; //I actually have no clue why this is here but might as well keep it just incase for now
+                    case -6: bKing |= (1ULL << move.to); std::cerr << "tf why was the king captured?\n"; break;
+                    default: std::cerr << "Uknown piece type in move.captured in unmakeMove(), value used -> " << move.captured << "\n";
+                } 
+            } 
+            if (!move.promotion) {              
+                switch(move.piece) { //bring the moved piece back to its orginal square
+                    case 1:  wPawns |= (1ULL << move.from); break;
+                    case -1: bPawns |= (1ULL << move.from); break;
+                    case 2:  wKnight |= (1ULL << move.from); break;
+                    case -2: bKnight |= (1ULL << move.from); break;
+                    case 3:  wBishop |= (1ULL << move.from); break;
+                    case -3: bBishop |= (1ULL << move.from); break;
+                    case 4:  wRook |= (1ULL << move.from); break;
+                    case -4: bRook |= (1ULL << move.from); break;
+                    case 5:  wQueen |= (1ULL << move.from); break;
+                    case -5: bQueen |= (1ULL << move.from); break;
+                    case 6:  wKing |= (1ULL << move.from); break;
+                    case -6: bKing |= (1ULL << move.from); break;
+                    case 0:  std::cerr << "Error in switch(move.piece) inside unmakeMove() no piece type 0 why the fuk is this shi making a move with no piece?"; break;
+                    default: std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;   
+                }
             }
             if (move.enPassant) { //add back the pawn if en passant happened
                 if (move.piece == 1) { bPawns |= (1ULL << (move.to - 8)); } 
@@ -380,16 +381,10 @@ class Board {
         }
 
         bool isInCheck(int side) {
+            if (!wKing) { std::cerr << "White king missing\n"; return false; }
+            if (!bKing) { std::cerr << "White king missing\n"; return false; }
             if (side == 0) { return isAttacked(__builtin_ctzll(wKing), side); }
             else if (side == 1) { return isAttacked(__builtin_ctzll(bKing), side); }
-            if (!wKing) {
-                std::cerr << "White king missing\n";
-                return false;
-            }
-            if (!bKing) {
-                std::cerr << "White king missing\n";
-                return false;
-            }
             else { std::cerr << "King is in check returned neither in check or not in check!\n"; return false; }
         }
 
@@ -666,7 +661,7 @@ int main() {
     Board board;
     Eval eval;
     moveGen moveGen;
-    
+
 
     return 0;
 }

@@ -17,8 +17,8 @@ struct Move {
 
 struct BoardState {
     bool wkscr, wqscr, bkscr, bqscr;
-    int enpassent_square;
-    int moving;
+    int enpassant_square;
+    int side;
     int halfmove_clock;
 };
 
@@ -31,7 +31,7 @@ class Board {
 
         int side = 0;
         int halfmove_clock = 0;
-        int enpassent_square = -1;
+        int enpassant_square = -1;
         bool wkscr = true;
         bool wqscr = true;
         bool bkscr = true;
@@ -136,16 +136,20 @@ class Board {
         // ========================= //
         // | Board class functions | //
         // ========================= //
-        
+
         void makeMove(Move move) {
+            if (HistoryIndex >= HistorySize) {
+                std::cerr << "History overflow\n";
+                return;
+            }
             BoardState& currentState = stateHistory[HistoryIndex]; // Create a refence so modifying currentState will modify the stateHistory[]
             currentState.wqscr = wqscr;
             currentState.wkscr = wkscr;
             currentState.bqscr = bqscr;
             currentState.bkscr = bkscr;
-            currentState.moving = moving;
+            currentState.side = side;
 
-            currentState.enpassent_square = enpassent_square;
+            currentState.enpassant_square = enpassant_square;
             currentState.halfmove_clock = halfmove_clock;
 
             moveHistory[HistoryIndex] = move;
@@ -153,8 +157,9 @@ class Board {
 
             if (move.piece == 1 || move.piece == -1 || move.captured != 0) { halfmove_clock = 0;} 
             else {halfmove_clock++;}
+            
 
-            //remove moving piece from its square
+            //remove side piece from its square
             switch(move.piece) {
                 case 1:
                     wPawns &= ~(1ULL << move.from); break;
@@ -186,7 +191,7 @@ class Board {
                     std::cerr << "Error in switch(move.piece) inside makeMove(), function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n";
                     break;
             }
-            //removing captured piece from square *if any* 
+            //reside captured piece from square *if any* 
             switch(move.captured) {
                 case 0:
                     break;
@@ -217,7 +222,7 @@ class Board {
                 default:
                     std::cerr << "Uknown piece type in move.captured in makeMove(), value used -> " << move.captured << "\n";
             }
-            //moving piece to its move square
+            //side piece to its move square
             switch(move.piece) {
                 case 1:
                     wPawns |= (1ULL << move.to); break;
@@ -249,21 +254,24 @@ class Board {
                     std::cerr << "Error in switch(move.piece) inside makeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n";
                     break;
             }
-            //deal with en passent (at least some of the logic)
-            if (move.enPassant == true) {
-                if (moving == 0) { bPawns &= ~(1ULL << (move.to - 8)); } 
-                else { wPawns &= ~(1ULL << (move.to + 8)); }
+            //deal with en passent (at least some of the logic i think)
+            if (move.enPassant) {
+                if (move.piece == 1) { // white moved
+                    bPawns &= ~(1ULL << (move.to - 8));
+                } else {
+                    wPawns &= ~(1ULL << (move.to + 8));
+                }
             }
 
             //deal with castling
             if (move.castle == true) {
-                if (moving == 0) {
+                if (side == 0) {
                     if (move.to - move.from > 0) {
                         wRook &= ~(1ULL << 7);
                         wRook |= (1ULL << 5);
                     }
                     else {
-                        wRook &= ~(1ULL);
+                        wRook &= ~(1ULL << 0);
                         wRook |= (1ULL << 3);
                     }
                     wqscr = false;
@@ -292,7 +300,7 @@ class Board {
 
             //handle promtion pieces
             if (move.promotion != 0) {
-                if (moving == 0) { wPawns &= ~(1ULL << move.to); }
+                if (side == 0) { wPawns &= ~(1ULL << move.to); }
                 else { bPawns &= ~(1ULL << move.to); }
                 switch(move.promotion) {
                         case 5:
@@ -314,20 +322,24 @@ class Board {
                 }
             }
             //update enpassant rules
-            enpassent_square = -1;
+            enpassant_square = -1;
             if ((move.piece == 1) && (move.to - move.from == 16)) {
-                enpassent_square = move.from + 8;
+                enpassant_square = move.from + 8;
             }
             else if ((move.piece == -1) && (move.from - move.to == 16)) {
-                enpassent_square = move.from - 8;
+                enpassant_square = move.from - 8;
             }
 
-            if (moving == 0) {moving = 1;} 
-            else if (moving == 1) {moving = 0;}
-            else {std::cerr << "moving variable is neither 1 or 0! \n";}
+            if (side == 0) {side = 1;} 
+            else if (side == 1) {side = 0;}
+            else {std::cerr << "side variable is neither 1 or 0! \n";}
         }
 
         void unmakeMove() {
+            if (HistoryIndex <= 0) {
+                std::cerr << "History underflow\n";
+                return;
+            }
             HistoryIndex--;
             Move& move = moveHistory[HistoryIndex];
             BoardState& previousState = stateHistory[HistoryIndex];
@@ -336,10 +348,10 @@ class Board {
             wkscr = previousState.wkscr;
             bqscr = previousState.bqscr;
             bkscr = previousState.bkscr;
-            moving = previousState.moving;
+            side = previousState.side;
 
             halfmove_clock = previousState.halfmove_clock;
-            enpassent_square = previousState.enpassent_square;
+            enpassant_square = previousState.enpassant_square;
 
 
             //undo pawn promotion
@@ -362,7 +374,7 @@ class Board {
                         case -2:
                             bKnight &= ~(1ULL << move.to); break;      
                 }
-                if (moving == 0) wPawns |= (1ULL << move.from);
+                if (side == 0) wPawns |= (1ULL << move.from);
                 else bPawns |= (1ULL << move.from);
             }
             else {
@@ -465,20 +477,23 @@ class Board {
                 }
 
                 //add back the pawn if en passant happened
-                if (move.enPassant == true) {
-                    if (moving == 1) { bPawns |= (1ULL << (move.to - 8)); }  // White moved, restore black pawn
-                    else { wPawns |= (1ULL << (move.to + 8)); }              // Black moved, restore white pawn
+                if (move.enPassant) {
+                    if (move.piece == 1) { // white moved
+                        bPawns |= (1ULL << (move.to - 8));
+                    } else { // black moved
+                        wPawns |= (1ULL << (move.to + 8));
+                    }
                 }
             }
             //undo castling if it happened
             if (move.castle == true) {
-                if (moving == 1) {
+                if (side == 1) {
                     if (move.to - move.from > 0) {
                         wRook |= (1ULL << 7);
                         wRook &= ~(1ULL << 5);
                     }
                     else {
-                        wRook |= (1ULL);
+                        wRook |= (1ULL << 0);
                         wRook &= ~(1ULL << 3);
                     }
                 }
@@ -495,32 +510,47 @@ class Board {
             }
         }
 
-        bool isInCheck(int sq, int side) {
+        bool isInCheck(int side) {
             if (side == 0) { return isAttacked(__builtin_ctzll(wKing), side); }
             else if (side == 1) { return isAttacked(__builtin_ctzll(bKing), side); }
+            if (!wKing) {
+                std::cerr << "White king missing\n";
+                return;
+            }
+            if (!bKing) {
+                std::cerr << "White king missing\n";
+                return;
+            }
+            else { std::cerr << "King is in check returned neither in check or not in check!\n"; return false; }
         }
 
         bool isAttacked(int sq, int side) {
             uint64_t occ = getOccupancy();
             if (side == 0) {
-                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & bQueen) > 0) { return true; }
-                else if (((getrookAttacks(sq, occ)) & bRook) > 0) { return true; }
-                else if (((getbishopAttacks(sq, occ)) & bBishop) > 0) { return true; }
+                uint64_t rook = getrookAttacks(sq, occ);
+                uint64_t bishop = getbishopAttacks(sq, occ);
+                if ((((rook) | (bishop)) & bQueen) > 0) { return true; }
+                else if (((rook) & bRook) > 0) { return true; }
+                else if (((bishop) & bBishop) > 0) { return true; }
                 else if (((knightAttacks[sq]) & bKnight) > 0) { return true; }
                 else if (((pawnAttacksW[sq]) & bPawns) > 0) { return true; }
+                else if (((kingAttacks[sq]) & bKing) > 0) { return true; }
             }
             else if (side == 1) {
-                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & wQueen) > 0) { return true; }
-                else if (((getrookAttacks(sq, occ)) & wRook) > 0) { return true; }
-                else if (((getbishopAttacks(sq, occ)) & wBishop) > 0) { return true; }
+                uint64_t rook = getrookAttacks(sq, occ);
+                uint64_t bishop = getbishopAttacks(sq, occ);
+                if ((((rook) | (bishop)) & wQueen) > 0) { return true; }
+                else if (((rook) & wRook) > 0) { return true; }
+                else if (((bishop) & wBishop) > 0) { return true; }
                 else if (((knightAttacks[sq]) & wKnight) > 0) { return true; }
                 else if (((pawnAttacksB[sq]) & wPawns) > 0) { return true; }
+                else if (((kingAttacks[sq]) & wKing) > 0) { return true; }
             }
-            else { std::cerr << "Error in isAttacked() moving is " << side << "\n";}
+            else { std::cerr << "Error in isAttacked() side is " << side << "\n";}
             return false;
         }
 
-        void LongPrint(uint64_t board) {
+        void LongPrint(uint64_t board) { //dont use if running in uci mode
             std::cout << "------------------\n";
             for (int row = 7; row >= 0; row--) {
                 for (int col = 0; col < 8; col++) {
@@ -533,8 +563,11 @@ class Board {
         }
 
         void initBoard() { 
-            if (initBoardRand == false) { initBoardRan = true; }
-            else {std::cerr << "Function initBoard has already been ran before!\n";}
+            if (initBoardRan) {
+                std::cerr << "initBoard already ran\n";
+                return;
+            }
+            initBoardRan = true;
             uint64_t temp_val = 1;
             //Pawn White
             for (int i = 0; i < 64; i++ ) {
@@ -576,7 +609,7 @@ class Board {
                     }
                 }
                 else{ kingAttacks[i] = (temp_val >> 1 | temp_val << 1) | ((temp_val << 7 | temp_val << 8 | temp_val << 9) | (temp_val >> 7 | temp_val >> 8 | temp_val >> 9)); }
-
+            }
             //Knight
             for (int sq = 0; sq < 64; sq++) {
                 knightAttacks[sq] = 0;
@@ -618,6 +651,11 @@ class Board {
                 for (int tr = r - 1, tf = f - 1; tr >= 1 && tf >= 1; tr--, tf--) temp_mask |= 1ULL << (tr * 8 + tf);
                 bishopMasks[i] = temp_mask;
             }
+
+            rookOffsets[0] = 0;
+            bishopOffsets[0] = 0;
+            for (int i = 1; i < 64; i++) { rookOffsets[i] = rookOffsets[i - 1] + (1ULL << (64 - rookShifts[i - 1])); }
+            for (int i = 1; i < 64; i++) { bishopOffsets[i] = bishopOffsets[i - 1] + (1ULL << (64 - bishopShifts[i - 1])); }
 
             fillBishopAttacks();
             fillRookAttacks();
@@ -756,6 +794,9 @@ class UCI {
 
 int main() {
     UCI uci;
+    Board board;
+    Eval eval;
+    moveGen moveGen;
 
     
 

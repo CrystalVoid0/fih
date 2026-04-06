@@ -551,6 +551,23 @@ class Board {
             return bishopAttacks[bishopOffsets[sq] + occ];
         }
 
+        int getPieceAt(int sq) {
+            uint64_t bit = 1ULL << sq;
+            if (board.wPawns & bit)  return 1;
+            if (board.wKnight & bit) return 2;
+            if (board.wBishop & bit) return 3;
+            if (board.wRook & bit)   return 4;
+            if (board.wQueen & bit)  return 5;
+            if (board.wKing & bit)   return 6;
+            if (board.bPawns & bit)  return -1;
+            if (board.bKnight & bit) return -2;
+            if (board.bBishop & bit) return -3;
+            if (board.bRook & bit)   return -4;
+            if (board.bQueen & bit)  return -5;
+            if (board.bKing & bit)   return -6;
+            return 0;
+        }
+
     private:
         uint64_t indexToOccupancy(int index, int numBits, uint64_t mask) {
             uint64_t occupancy = 0;
@@ -619,7 +636,95 @@ class Board {
 
 class moveGen {
     public:
+        int generateMoves(Move* moves) {
+            int nodes = 0;
+            uint64_t rank3Mask = 0x0000000000FF0000ULL;
+            uint64_t rank6Mask = 0x0000FF0000000000ULL;
 
+            uint64_t occ = board.getOccupancy();
+            uint64_t occW = board.getOccupancyWhite();
+            uint64_t occB = board.getOccupancyBlack();
+
+            if (board.moving == 0) {
+                uint64_t pawns = board.wPawns;      //
+                uint64_t bishops = board.wBishop;   //
+                uint64_t knights = board.wKnight;   //
+                uint64_t rooks = board.wRook;       //
+                uint64_t queens = board.wQueen;     //
+                uint64_t king = board.wKing;        //
+
+                while (pawns > 0) {
+                    int from = __builtin_ctzll(pawns);
+                    pawns &= pawns - 1;
+                }
+
+                while (bishops > 0) {
+                    int from = __builtin_ctzll(bishops);
+                    bishops &= bishops - 1;
+                }1
+
+                while (knights > 0) {
+                    int from = __builtin_ctzll(knights);
+                    knights &= knights - 1;
+                }
+
+                while (rooks > 0) {
+                    int from = __builtin_ctzll(rooks);
+                    rooks &= rooks - 1;
+                }
+
+                while (queens > 0) {
+                    int from = __builtin_ctzll(pawns);
+                    queens &= queens - 1;
+                }
+
+                while (king > 0) {
+                    int from = __builtin_ctzll(pawns);
+                    king &= king - 1;
+                } 
+            }
+            
+            else {
+                uint64_t pawns = board.wPawns;      //
+                uint64_t bishops = board.wBishop;   //
+                uint64_t knights = board.wKnight;   //
+                uint64_t rooks = board.wRook;       //
+                uint64_t queens = board.wQueen;     //
+                uint64_t king = board.wKing;        //
+
+                while (pawns > 0) {
+                    int from = __builtin_ctzll(pawns);
+                    pawns &= pawns - 1;
+                }
+
+                while (bishops > 0) {
+                    int from = __builtin_ctzll(bishops);
+                    bishops &= bishops - 1;
+                }1
+
+                while (knights > 0) {
+                    int from = __builtin_ctzll(knights);
+                    knights &= knights - 1;
+                }
+
+                while (rooks > 0) {
+                    int from = __builtin_ctzll(rooks);
+                    rooks &= rooks - 1;
+                }
+
+                while (queens > 0) {
+                    int from = __builtin_ctzll(pawns);
+                    queens &= queens - 1;
+                }
+
+                while (king > 0) {
+                    int from = __builtin_ctzll(pawns);
+                    king &= king - 1;
+                } 
+            }
+
+            return nodes;
+        }
     private:
     
 };

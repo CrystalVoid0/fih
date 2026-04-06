@@ -5,15 +5,67 @@
 #include <chrono>
 
 
-struct Move {
-    int from      = 0;
-    int to        = 0;
-    int piece     = 0;
-    int captured  = 0;
-    int promotion = 0;
-    bool enPassant = false;
-    bool castle    = false;
-};
+// ================================= //
+// |       fih chess engine        | //
+// ================================= //
+// This is my second attempt at      //
+// writing a chess engine. This bot  //
+// was made a learning oppurinity.   //
+// Yes I know a lot of the code is   //
+// horrible to say the least but its //
+// fine. Hopefully this engine will  //
+// become 2500 elo at some point :)  // 
+// ================================= //
+
+
+//             TO DO                 //
+// ================================= //
+// 1. Implement the new encoding system
+// 2. Update makeMove() & unmakeMove() as needed
+// 3. Write the generateMoves() function
+// 4. Write a good solid fen parser
+// 5. Write a preft test function to confirm makeMove() & unmakeMove() and generate moves work as intened
+// 6. Write a basic search function using alpha beta and simple pruning
+// 7. Add a very basic evaluation function using piece tables etc\
+// 8. Add in basic UCI & threading
+// 9. After this is the fun part
+
+// ================================
+// Move encoding (packed uint32_t)
+// ================================
+//
+// Bit layout:
+//  0- 5  from square
+//  6-11  to square
+// 12-15  piece     (stored as piece + 7, so -6..6 becomes 1..13)
+// 16-19  captured  (stored as captured + 7, 0+7=7 means no capture)
+// 20-23  promotion (stored as promotion + 7, 7 means no promotion)
+// 24     enPassant flag
+// 25     castle flag
+
+
+
+static const int PIECE_OFFSET = 7; // offset added before storing signed piece values
+
+inline uint32_t encodeMove(int from, int to, int piece, int captured, int promotion, bool enPassant, bool castle) {
+    return  (uint32_t)(from)                          // bits 0-5
+          | (uint32_t)(to)              << 6          // bits 6-11
+          | (uint32_t)(piece    + PIECE_OFFSET) << 12 // bits 12-15
+          | (uint32_t)(captured + PIECE_OFFSET) << 16 // bits 16-19
+          | (uint32_t)(promotion+ PIECE_OFFSET) << 20 // bits 20-23
+          | (uint32_t)(enPassant)                << 24 // bit 24
+          | (uint32_t)(castle)                   << 25; // bit 25
+}
+
+inline int getFrom(uint32_t move) { return move & 0x3F; } // grab lowest 6 bits 
+inline int getTo(uint32_t move) { return (move >> 6) & 0x3F; } // shift right 6, grab 6 bits
+inline int getPiece(uint32_t move) { return ((move >> 12) & 0x0F) - PIECE_OFFSET; } // shift right 12, grab 4 bits, undo offset
+inline int getCaptured(uint32_t move) { return ((move >> 16) & 0x0F) - PIECE_OFFSET; }
+inline int getPromotion(uint32_t move) { return ((move >> 20) & 0x0F) - PIECE_OFFSET; }
+inline bool getEnPassant(uint32_t move) { return (move >> 24) & 0x01; } // shift right 24, grab 1 bit 
+inline bool getCastle(uint32_t move) { return (move >> 25) & 0x01; }
+inline bool isCapture(uint32_t move) { return getCaptured(move) != 0; } // Helper to check if a move has no capture (captured field == 0 after undoing offset)
+inline bool isPromotion(uint32_t move) { return getPromotion(move) != 0; } // Helper to check if a move is a promotion
 
 struct BoardState {
     bool wkscr, wqscr, bkscr, bqscr;
@@ -51,6 +103,8 @@ class Board {
         uint64_t bQueen = 0;
         uint64_t bKing = 0;
 
+        int mailbox[64]; //learned that having something like this is recommened and is used almost by all engines?
+
         uint64_t pawnAttacksW[64];
         uint64_t pawnAttacksB[64];
         uint64_t knightAttacks[64];
@@ -66,7 +120,7 @@ class Board {
         uint64_t bishopAttacks[5248];
 
         int HistoryIndex = 0;   
-        Move moveHistory[4096];
+        uint32_t moveHistory[4096];
         BoardState stateHistory[4096];
 
         bool initBoardRan = false;
@@ -131,251 +185,181 @@ class Board {
             59, 59, 59, 59, 59, 59, 59, 59,
             58, 59, 59, 59, 59, 59, 59, 58
         };
-
+    
         // ========================= //
         // | Board class functions | //
         // ========================= //
 
-        void makeMove(Move move) {
+        void loadFEN(const std::string& fen) { //yes this was coded with claude since I also hate handling inputs and dealing with strings in c++ if it where python I code code this but its not :|
+            wPawns = wKnight = wBishop = wRook = wQueen = wKing = 0;
+            bPawns = bKnight = bBishop = bRook = bQueen = bKing = 0;
+            for (int i = 0; i < 64; i++) mailbox[i] = 0;
+            wkscr = wqscr = bkscr = bqscr = false;
+            enpassant_square = -1;
+            halfmove_clock = 0;
+            HistoryIndex = 0;
+
+            std::string parts[6];
+            int partIndex = 0;
+            for (char c : fen) {
+                if (c == ' ') { partIndex++; if (partIndex >= 6) break; }
+                else parts[partIndex] += c;
+            }
+
+            int sq = 56; 
+            for (char c : parts[0]) {
+                if (c == '/') {
+                    sq -= 16;
+                } else if (c >= '1' && c <= '8') {
+                    sq += (c - '0');
+                } else {
+                    int piece = 0;
+                    switch(c) {
+                        case 'P': piece =  1; break;
+                        case 'p': piece = -1; break;
+                        case 'N': piece =  2; break;
+                        case 'n': piece = -2; break;
+                        case 'B': piece =  3; break;
+                        case 'b': piece = -3; break;
+                        case 'R': piece =  4; break;
+                        case 'r': piece = -4; break;
+                        case 'Q': piece =  5; break;
+                        case 'q': piece = -5; break;
+                        case 'K': piece =  6; break;
+                        case 'k': piece = -6; break;
+                    }
+                    placePiece(sq, piece);
+                    sq++;
+                }
+            }
+
+            side = (parts[1] == "w") ? 0 : 1;
+
+            for (char c : parts[2]) {
+                switch(c) {
+                    case 'K': wkscr = true; break;
+                    case 'Q': wqscr = true; break;
+                    case 'k': bkscr = true; break;
+                    case 'q': bqscr = true; break;
+                    case '-': break;
+                }
+            }
+
+            if (parts[3] != "-") {
+                int file = parts[3][0] - 'a'; // 'a'=0 ... 'h'=7
+                int rank = parts[3][1] - '1'; // '1'=0 ... '8'=7
+                enpassant_square = rank * 8 + file;
+            }
+
+            halfmove_clock = std::stoi(parts[4]);
+        }
+
+        void makeMove(uint32_t move) {
             if (HistoryIndex >= 4096) { std::cerr << "History overflow\n"; return; }
-            BoardState& currentState = stateHistory[HistoryIndex]; // Create a refence so modifying currentState will modify the stateHistory[]
-            currentState.wqscr = wqscr;
-            currentState.wkscr = wkscr;
-            currentState.bqscr = bqscr;
-            currentState.bkscr = bkscr;
-            currentState.side = side;
 
-            currentState.enpassant_square = enpassant_square;
-            currentState.halfmove_clock = halfmove_clock;
-
+            stateHistory[HistoryIndex].enpassant_square = enpassant_square;
+            stateHistory[HistoryIndex].halfmove_clock = halfmove_clock;
+            stateHistory[HistoryIndex].wkscr = wkscr;
+            stateHistory[HistoryIndex].wqscr = wqscr;
+            stateHistory[HistoryIndex].bkscr = bkscr;
+            stateHistory[HistoryIndex].bqscr = bqscr;
             moveHistory[HistoryIndex] = move;
             HistoryIndex++;
 
-            if (move.piece == 1 || move.piece == -1 || move.captured != 0) { halfmove_clock = 0;} 
+            int from      = getFrom(move);
+            int to        = getTo(move);
+            int piece     = getPiece(move);
+            int captured  = getCaptured(move);
+            int promotion = getPromotion(move);
+            bool enPassantMove = getEnPassant(move);
+            bool castleMove = getCastle(move);
+
+            if (piece == 1 || piece == -1 || captured != 0) { halfmove_clock = 0;} 
             else {halfmove_clock++;}
  
-            //yes i know its a lot of switch staments :(
-            switch(move.piece) { //remove moving piece from its square
-                case 1:  wPawns &= ~(1ULL << move.from); break;
-                case -1: bPawns &= ~(1ULL << move.from); break;
-                case 2:  wKnight &= ~(1ULL << move.from); break;
-                case -2: bKnight &= ~(1ULL << move.from); break;
-                case 3:  wBishop &= ~(1ULL << move.from); break;
-                case -3: bBishop &= ~(1ULL << move.from); break;
-                case 4:  wRook &= ~(1ULL << move.from); break;
-                case -4: bRook &= ~(1ULL << move.from); break;
-                case 5:  wQueen &= ~(1ULL << move.from); break;
-                case -5: bQueen &= ~(1ULL << move.from); break;
-                case 6:  wKing &= ~(1ULL << move.from); break;
-                case -6: bKing &= ~(1ULL << move.from); break;
-                case 0:   std::cerr << "Error in switch(move.piece) inside makeMove(), no piece type 0 why the fuk is this shi making a move with no piece?"; break;
-                default:  std::cerr << "Error in switch(move.piece) inside makeMove(), function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;
-            }
-            if (!move.enPassant) { //remove captured piece from square *if any* unless enPassant
-                switch(move.captured) { 
-                    case 0:  break;
-                    case 1:  wPawns &= ~(1ULL << move.to); break;
-                    case -1: bPawns &= ~(1ULL << move.to); break;
-                    case 2:  wKnight &= ~(1ULL << move.to); break;
-                    case -2: bKnight &= ~(1ULL << move.to); break;
-                    case 3:  wBishop &= ~(1ULL << move.to); break;
-                    case -3: bBishop &= ~(1ULL << move.to); break;
-                    case 4:  wRook &= ~(1ULL << move.to); break;
-                    case -4: bRook &= ~(1ULL << move.to); break;
-                    case 5:  wQueen &= ~(1ULL << move.to); break;
-                    case -5: bQueen &= ~(1ULL << move.to); break;
-                    case 6:  wKing &= ~(1ULL << move.to); break;
-                    case -6: bKing &= ~(1ULL << move.to); break;
-                    default: std::cerr << "Uknown piece type in move.captured in makeMove(), value used -> " << move.captured << "\n";
-                }
-            } else { //remove pawn below enPassant square
-                if (move.piece == 1) { bPawns &= ~(1ULL << (move.to - 8)); } 
-                else { wPawns &= ~(1ULL << (move.to + 8)); }
-            }
-            if (!move.promotion) { //add moving piece to its move square
-                switch(move.piece) {
-                    case 1:  wPawns |= (1ULL << move.to); break;
-                    case -1: bPawns |= (1ULL << move.to); break;
-                    case 2:  wKnight |= (1ULL << move.to); break;
-                    case -2: bKnight |= (1ULL << move.to); break;
-                    case 3:  wBishop |= (1ULL << move.to); break;
-                    case -3: bBishop |= (1ULL << move.to); break;
-                    case 4:  wRook |= (1ULL << move.to); break;
-                    case -4: bRook |= (1ULL << move.to); break;
-                    case 5:  wQueen |= (1ULL << move.to); break;
-                    case -5: bQueen |= (1ULL << move.to); break;
-                    case 6:  wKing |= (1ULL << move.to); break;
-                    case -6: bKing |= (1ULL << move.to); break;
-                    case 0:  std::cerr << "Error in switch(move.piece) no piece type 0 why the fuk is this shi making a move with no piece?"; break;
-                    default: std::cerr << "Error in switch(move.piece) inside makeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;
-                }
-            } else { //if promotion add promoted piece to destination square
-                switch(move.promotion) {
-                    case 5:  wQueen |= (1ULL << move.to); break;
-                    case -5: bQueen |= (1ULL << move.to); break;
-                    case 4:  wRook |= (1ULL << move.to); break;
-                    case -4: bRook |= (1ULL << move.to); break;
-                    case 3:  wBishop |= (1ULL << move.to); break;
-                    case -3: bBishop |= (1ULL << move.to); break;
-                    case 2:  wKnight |= (1ULL << move.to); break;
-                    case -2: bKnight |= (1ULL << move.to); break;
-                    default: std::cerr << "Error in makeMove switch(move.promotion) unknown promotion value! {" << move.promotion << "}\n";
-                }
+            removePiece(from, piece);
+
+            if (captured != 0 && !enPassantMove) {
+                removePiece(to, captured);
             }
 
-            //deal with castling
-            if (move.castle == true) {
-                if (side == 0) {
-                    if (move.to - move.from > 0) {
-                        wRook &= ~(1ULL << 7);
-                        wRook |= (1ULL << 5);
-                    }
-                    else {
-                        wRook &= ~(1ULL << 0);
-                        wRook |= (1ULL << 3);
-                    }
-                    wqscr = false;
-                    wkscr = false;
-                }
-                else {
-                    if (move.to - move.from > 0) {
-                        bRook &= ~(1ULL << 63);
-                        bRook |= (1ULL << 61);
-                    }
-                    else {
-                        bRook &= ~(1ULL << 56);
-                        bRook |= (1ULL << 59);
-                    }
-                    bqscr = false;
-                    bkscr = false;
-                }
+            if (enPassantMove) {
+                if (piece == 1) removePiece(to - 8, -1);
+                else removePiece(to + 8, 1);
             }
-            //update castling rules if rook or king move or rook taken
-            if (move.from == 4)  { wkscr = false; wqscr = false; } // white king moved
-            if (move.from == 60) { bkscr = false; bqscr = false; } // black king moved
-            if (move.from == 0  || move.to == 0)  wqscr = false;   // a1 rook
-            if (move.from == 7  || move.to == 7)  wkscr = false;   // h1 rook
-            if (move.from == 56 || move.to == 56) bqscr = false;   // a8 rook
-            if (move.from == 63 || move.to == 63) bkscr = false;   // h8 rook
+            
+            if (promotion != 0) placePiece(to, promotion);
+            else placePiece(to, piece);
+            
+            if (castleMove) {
+                if (piece == 6) {
+                    if (to == 6) { removePiece(7, 4);  placePiece(5, 4);  } // kingside
+                    else { removePiece(0, 4);  placePiece(3, 4);  } // queenside
+                } else {
+                    if (to == 62) { removePiece(63, -4); placePiece(61, -4); } // kingside
+                    else { removePiece(56, -4); placePiece(59, -4); } // queenside
+                }
+            }   
 
-            //update enpassant rules
+            if (from == 4)  { wkscr = false; wqscr = false; } // white king moved
+            if (from == 60) { bkscr = false; bqscr = false; } // black king moved
+            if (from == 0  || to == 0)  wqscr = false;   // a1 rook
+            if (from == 7  || to == 7)  wkscr = false;   // h1 rook
+            if (from == 56 || to == 56) bqscr = false;   // a8 rook
+            if (from == 63 || to == 63) bkscr = false;   // h8 rook
+
             enpassant_square = -1;
-            if ((move.piece == 1) && (move.to - move.from == 16)) { enpassant_square = move.from + 8; }
-            else if ((move.piece == -1) && (move.from - move.to == 16)) { enpassant_square = move.from - 8; }
+            if ((piece == 1) && (to - from == 16)) enpassant_square = from + 8; 
+            else if ((piece == -1) && (from - to == 16)) enpassant_square = from - 8; 
 
-            if (side == 0) {side = 1;} 
-            else if (side == 1) {side = 0;}
-            else {std::cerr << "side variable is neither 1 or 0! \n";}
+            side ^= 1;
         }
 
         void unmakeMove() {
             if (HistoryIndex <= 0) { std::cerr << "History underflow\n"; return; }
 
             HistoryIndex--;
-            Move& move = moveHistory[HistoryIndex];
-            BoardState& previousState = stateHistory[HistoryIndex];
+            uint32_t move = moveHistory[HistoryIndex];
 
-            wqscr = previousState.wqscr;
-            wkscr = previousState.wkscr;
-            bqscr = previousState.bqscr;
-            bkscr = previousState.bkscr;
-            side = previousState.side;
+            int from      = getFrom(move);
+            int to        = getTo(move);
+            int piece     = getPiece(move);
+            int captured  = getCaptured(move);
+            int promotion = getPromotion(move);
 
-            halfmove_clock = previousState.halfmove_clock;
-            enpassant_square = previousState.enpassant_square;
+            enpassant_square = stateHistory[HistoryIndex].enpassant_square;
+            halfmove_clock   = stateHistory[HistoryIndex].halfmove_clock;
+            wkscr = stateHistory[HistoryIndex].wkscr;
+            wqscr = stateHistory[HistoryIndex].wqscr;
+            bkscr = stateHistory[HistoryIndex].bkscr;
+            bqscr = stateHistory[HistoryIndex].bqscr;
 
-            
-            if (move.promotion != 0) { //undo pawn promotion
-                switch(move.promotion) {
-                    case 5:  wQueen &= ~(1ULL << move.to); break;
-                    case -5: bQueen &= ~(1ULL << move.to); break;
-                    case 4:  wRook &= ~(1ULL << move.to); break;
-                    case -4: bRook &= ~(1ULL << move.to); break;
-                    case 3:  wBishop &= ~(1ULL << move.to); break;
-                    case -3: bBishop &= ~(1ULL << move.to); break;
-                    case 2:  wKnight &= ~(1ULL << move.to); break;
-                    case -2: bKnight &= ~(1ULL << move.to); break;      
-                }
-                if (move.piece == 1) wPawns |= (1ULL << move.from);
-                else bPawns |= (1ULL << move.from);
+            side ^= 1;
+
+            if (promotion != 0) {
+                removePiece(to, promotion);
+                placePiece(from, piece);
+            } else {
+                removePiece(to, piece);
+                placePiece(from, piece);
             }
-            else { //remove the piece from its destination square
-                switch(move.piece) {
-                    case 1:  wPawns &= ~(1ULL << move.to); break;
-                    case -1: bPawns &= ~(1ULL << move.to); break;
-                    case 2:  wKnight &= ~(1ULL << move.to); break;
-                    case -2: bKnight &= ~(1ULL << move.to); break;
-                    case 3:  wBishop &= ~(1ULL << move.to); break;
-                    case -3: bBishop &= ~(1ULL << move.to); break;
-                    case 4:  wRook &= ~(1ULL << move.to); break;
-                    case -4: bRook &= ~(1ULL << move.to); break;
-                    case 5:  wQueen &= ~(1ULL << move.to); break;
-                    case -5: bQueen &= ~(1ULL << move.to); break;
-                    case 6:  wKing &= ~(1ULL << move.to); break;
-                    case -6: bKing &= ~(1ULL << move.to); break;
-                    case 0:  std::cerr << "Error in switch(move.piece) in unmakeMove() no piece type 0 why the fuk is this shi making a move with no piece?"; break;
-                    default: std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;
-                }
+
+            if (captured != 0 && !getEnPassant(move)) {
+                placePiece(to, captured);
             }
-            if (!move.enPassant) {
-                switch(move.captured) { //add back any captured piece to the board
-                    case 0: break;
-                    case 1:  wPawns |= (1ULL << move.to); break;
-                    case -1: bPawns |= (1ULL << move.to); break;
-                    case 2:  wKnight |= (1ULL << move.to); break;
-                    case -2: bKnight |= (1ULL << move.to); break;
-                    case 3:  wBishop |= (1ULL << move.to); break;
-                    case -3: bBishop |= (1ULL << move.to); break;
-                    case 4:  wRook |= (1ULL << move.to); break;
-                    case -4: bRook |= (1ULL << move.to); break;
-                    case 5:  wQueen |= (1ULL << move.to); break;
-                    case -5: bQueen |= (1ULL << move.to); break;
-                    case 6:  wKing |= (1ULL << move.to); std::cerr << "tf why was the king captured?\n"; break; //I actually have no clue why this is here but might as well keep it just incase for now
-                    case -6: bKing |= (1ULL << move.to); std::cerr << "tf why was the king captured?\n"; break;
-                    default: std::cerr << "Uknown piece type in move.captured in unmakeMove(), value used -> " << move.captured << "\n";
-                } 
-            } 
-            if (!move.promotion) {              
-                switch(move.piece) { //bring the moved piece back to its orginal square
-                    case 1:  wPawns |= (1ULL << move.from); break;
-                    case -1: bPawns |= (1ULL << move.from); break;
-                    case 2:  wKnight |= (1ULL << move.from); break;
-                    case -2: bKnight |= (1ULL << move.from); break;
-                    case 3:  wBishop |= (1ULL << move.from); break;
-                    case -3: bBishop |= (1ULL << move.from); break;
-                    case 4:  wRook |= (1ULL << move.from); break;
-                    case -4: bRook |= (1ULL << move.from); break;
-                    case 5:  wQueen |= (1ULL << move.from); break;
-                    case -5: bQueen |= (1ULL << move.from); break;
-                    case 6:  wKing |= (1ULL << move.from); break;
-                    case -6: bKing |= (1ULL << move.from); break;
-                    case 0:  std::cerr << "Error in switch(move.piece) inside unmakeMove() no piece type 0 why the fuk is this shi making a move with no piece?"; break;
-                    default: std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n"; break;   
-                }
+
+            if (getEnPassant(move)) {
+                if (piece == 1) placePiece(to - 8, -1);
+                else            placePiece(to + 8,  1);
             }
-            if (move.enPassant) { //add back the pawn if en passant happened
-                if (move.piece == 1) { bPawns |= (1ULL << (move.to - 8)); } 
-                else { wPawns |= (1ULL << (move.to + 8)); }
-            }
-            if (move.castle == true) { //undo castling if it happened
-                if (side == 0) {
-                    if (move.to - move.from > 0) {
-                        wRook |= (1ULL << 7);
-                        wRook &= ~(1ULL << 5);
-                    }
-                    else {
-                        wRook |= (1ULL << 0);
-                        wRook &= ~(1ULL << 3);
-                    }
+
+            if (getCastle(move)) {
+                if (piece == 6) {
+                    if (to == 6) { removePiece(5, 4);  placePiece(7, 4);  }
+                    else { removePiece(3, 4);  placePiece(0, 4);  }
                 } else {
-                    if (move.to - move.from > 0) {
-                        bRook |= (1ULL << 63);
-                        bRook &= ~(1ULL << 61);
-                    }
-                    else {
-                        bRook |= (1ULL << 56);
-                        bRook &= ~(1ULL << 59);
-                    }
+                    if (to == 62) { removePiece(61, -4); placePiece(63, -4); }
+                    else { removePiece(59, -4); placePiece(56, -4); }
                 }
             }
         }
@@ -553,22 +537,58 @@ class Board {
 
         int getPieceAt(int sq) {
             uint64_t bit = 1ULL << sq;
-            if (board.wPawns & bit)  return 1;
-            if (board.wKnight & bit) return 2;
-            if (board.wBishop & bit) return 3;
-            if (board.wRook & bit)   return 4;
-            if (board.wQueen & bit)  return 5;
-            if (board.wKing & bit)   return 6;
-            if (board.bPawns & bit)  return -1;
-            if (board.bKnight & bit) return -2;
-            if (board.bBishop & bit) return -3;
-            if (board.bRook & bit)   return -4;
-            if (board.bQueen & bit)  return -5;
-            if (board.bKing & bit)   return -6;
+            if (wPawns & bit)  return 1;
+            if (wKnight & bit) return 2;
+            if (wBishop & bit) return 3;
+            if (wRook & bit)   return 4;
+            if (wQueen & bit)  return 5;
+            if (wKing & bit)   return 6;
+            if (bPawns & bit)  return -1;
+            if (bKnight & bit) return -2;
+            if (bBishop & bit) return -3;
+            if (bRook & bit)   return -4;
+            if (bQueen & bit)  return -5;
+            if (bKing & bit)   return -6;
             return 0;
         }
 
     private:
+        void removePiece(int sq, int piece) {
+            mailbox[sq] = 0;
+            switch(piece) {
+                case  1: wPawns  &= ~(1ULL << sq); break;
+                case -1: bPawns  &= ~(1ULL << sq); break;
+                case  2: wKnight &= ~(1ULL << sq); break;
+                case -2: bKnight &= ~(1ULL << sq); break;
+                case  3: wBishop &= ~(1ULL << sq); break;
+                case -3: bBishop &= ~(1ULL << sq); break;
+                case  4: wRook   &= ~(1ULL << sq); break;
+                case -4: bRook   &= ~(1ULL << sq); break;
+                case  5: wQueen  &= ~(1ULL << sq); break;
+                case -5: bQueen  &= ~(1ULL << sq); break;
+                case  6: wKing   &= ~(1ULL << sq); break;
+                case -6: bKing   &= ~(1ULL << sq); break;
+            }
+        }
+
+        void placePiece(int sq, int piece) {
+            mailbox[sq] = piece;
+            switch(piece) {
+                case  1: wPawns  |= (1ULL << sq); break;
+                case -1: bPawns  |= (1ULL << sq); break;
+                case  2: wKnight |= (1ULL << sq); break;
+                case -2: bKnight |= (1ULL << sq); break;
+                case  3: wBishop |= (1ULL << sq); break;
+                case -3: bBishop |= (1ULL << sq); break;
+                case  4: wRook   |= (1ULL << sq); break;
+                case -4: bRook   |= (1ULL << sq); break;
+                case  5: wQueen  |= (1ULL << sq); break;
+                case -5: bQueen  |= (1ULL << sq); break;
+                case  6: wKing   |= (1ULL << sq); break;
+                case -6: bKing   |= (1ULL << sq); break;
+            }
+        }
+
         uint64_t indexToOccupancy(int index, int numBits, uint64_t mask) {
             uint64_t occupancy = 0;
             for (int i = 0; i < numBits; i++) {
@@ -636,93 +656,248 @@ class Board {
 
 class moveGen {
     public:
-        int generateMoves(Move* moves) {
+        Board& board;
+        moveGen(Board& b) : board(b) {}
+
+        uint64_t perft(int depth) {
+            if (depth == 0) return 1;
+
+            uint32_t moves[256];
+            int count = generateMoves(moves);
+            uint64_t nodes = 0;
+
+            for (int i = 0; i < count; i++) {
+                board.makeMove(moves[i]);
+
+                int movedSide = board.side ^ 1;
+                if (!board.isInCheck(movedSide)) {
+                    nodes += perft(depth - 1);
+                }
+
+                board.unmakeMove();
+            }
+
+            return nodes;
+        }
+        
+        void perftDivide(int depth) {
+            uint32_t moves[256];
+            int count = generateMoves(moves);
+            uint64_t total = 0;
+
+            for (int i = 0; i < count; i++) {
+                board.makeMove(moves[i]);
+
+                int movedSide = board.side ^ 1;
+                uint64_t nodes = 0;
+                if (!board.isInCheck(movedSide)) {
+                    nodes = perft(depth - 1);
+                }
+
+                board.unmakeMove();
+
+                if (nodes > 0) {
+                    int from = getFrom(moves[i]);
+                    int to   = getTo(moves[i]);
+                    char fromFile = 'a' + (from % 8);
+                    char fromRank = '1' + (from / 8);
+                    char toFile   = 'a' + (to % 8);
+                    char toRank   = '1' + (to / 8);
+                    std::cout << fromFile << fromRank << toFile << toRank << ": " << nodes << "\n";
+                    total += nodes;
+                }
+            }
+            std::cout << "Total: " << total << "\n";
+        }
+        
+        int generateMoves(uint32_t* moves) {
             int nodes = 0;
-            uint64_t rank3Mask = 0x0000000000FF0000ULL;
-            uint64_t rank6Mask = 0x0000FF0000000000ULL;
+            int side = board.side;
 
             uint64_t occ = board.getOccupancy();
-            uint64_t occW = board.getOccupancyWhite();
-            uint64_t occB = board.getOccupancyBlack();
+            uint64_t ownPieces = (side == 0) ? board.getOccupancyWhite() : board.getOccupancyBlack();   //just found out I can do stuff like this in one line c++ is crazy
+            uint64_t enemyPieces = (side == 0) ? board.getOccupancyBlack() : board.getOccupancyWhite();
 
-            if (board.moving == 0) {
-                uint64_t pawns = board.wPawns;      //
-                uint64_t bishops = board.wBishop;   //
-                uint64_t knights = board.wKnight;   //
-                uint64_t rooks = board.wRook;       //
-                uint64_t queens = board.wQueen;     //
-                uint64_t king = board.wKing;        //
+            uint64_t pawns = (side == 0) ? board.wPawns : board.bPawns;
+            uint64_t bishops = (side == 0) ? board.wBishop : board.bBishop;
+            uint64_t knights = (side == 0) ? board.wKnight : board.bKnight;
+            uint64_t rooks = (side == 0) ? board.wRook : board.bRook;
+            uint64_t queens = (side == 0) ? board.wQueen : board.bQueen;
+            uint64_t king = (side == 0) ? board.wKing : board.bKing;
 
-                while (pawns > 0) {
-                    int from = __builtin_ctzll(pawns);
-                    pawns &= pawns - 1;
+            while (pawns > 0) {
+                int from = __builtin_ctzll(pawns);
+                pawns &= pawns - 1;
+                uint64_t bit = 1ULL << from;
+
+                if (side == 0) {
+                    // single push
+                    if (!((occ) & (bit << 8))) {
+                        // promotion
+                        if (from >= 48) {
+                            moves[nodes++] = encodeMove(from, from + 8, 1, 0,  5, false, false); // queen
+                            moves[nodes++] = encodeMove(from, from + 8, 1, 0,  4, false, false); // rook
+                            moves[nodes++] = encodeMove(from, from + 8, 1, 0,  3, false, false); // bishop
+                            moves[nodes++] = encodeMove(from, from + 8, 1, 0,  2, false, false); // knight
+                        } else {
+                            moves[nodes++] = encodeMove(from, from + 8, 1, 0, 0, false, false);
+                        }
+                        // double push (only possible if single push was clear)
+                        if (from >= 8 && from <= 15 && !(occ & (bit << 16))) {
+                            moves[nodes++] = encodeMove(from, from + 16, 1, 0, 0, false, false);
+                        }
+                    }
+
+                    // captures
+                    uint64_t captures = board.pawnAttacksW[from] & enemyPieces;
+                    while (captures) {
+                        int to = __builtin_ctzll(captures);
+                        captures &= captures - 1;
+                        if (from >= 48) { // promotion capture
+                            moves[nodes++] = encodeMove(from, to, 1, board.getPieceAt(to),  5, false, false);
+                            moves[nodes++] = encodeMove(from, to, 1, board.getPieceAt(to),  4, false, false);
+                            moves[nodes++] = encodeMove(from, to, 1, board.getPieceAt(to),  3, false, false);
+                            moves[nodes++] = encodeMove(from, to, 1, board.getPieceAt(to),  2, false, false);
+                        } else {
+                            moves[nodes++] = encodeMove(from, to, 1, board.getPieceAt(to), 0, false, false);
+                        }
+                    }
+
+                    // en passant
+                    if (board.enpassant_square != -1 && (board.pawnAttacksW[from] & (1ULL << board.enpassant_square))) {
+                        moves[nodes++] = encodeMove(from, board.enpassant_square, 1, -1, 0, true, false);
+                    }
+
+                } else {
+                    // single push
+                    if (!(occ & (bit >> 8))) {
+                        // promotion
+                        if (from >= 8 && from <= 15) {
+                            moves[nodes++] = encodeMove(from, from - 8, -1, 0, -5, false, false);
+                            moves[nodes++] = encodeMove(from, from - 8, -1, 0, -4, false, false);
+                            moves[nodes++] = encodeMove(from, from - 8, -1, 0, -3, false, false);
+                            moves[nodes++] = encodeMove(from, from - 8, -1, 0, -2, false, false);
+                        } else {
+                            moves[nodes++] = encodeMove(from, from - 8, -1, 0, 0, false, false);
+                        }
+                        // double push
+                        if (from >= 48 && from <= 55 && !(occ & (bit >> 16))) {
+                            moves[nodes++] = encodeMove(from, from - 16, -1, 0, 0, false, false);
+                        }
+                    }
+
+                    // captures
+                    uint64_t captures = board.pawnAttacksB[from] & enemyPieces;
+                    while (captures) {
+                        int to = __builtin_ctzll(captures);
+                        captures &= captures - 1;
+                        if (from >= 8 && from <= 15) { // promotion capture
+                            moves[nodes++] = encodeMove(from, to, -1, board.getPieceAt(to), -5, false, false);
+                            moves[nodes++] = encodeMove(from, to, -1, board.getPieceAt(to), -4, false, false);
+                            moves[nodes++] = encodeMove(from, to, -1, board.getPieceAt(to), -3, false, false);
+                            moves[nodes++] = encodeMove(from, to, -1, board.getPieceAt(to), -2, false, false);
+                        } else {
+                            moves[nodes++] = encodeMove(from, to, -1, board.getPieceAt(to), 0, false, false);
+                        }
+                    }
+
+                    // en passant
+                    if (board.enpassant_square != -1 && (board.pawnAttacksB[from] & (1ULL << board.enpassant_square))) {
+                        moves[nodes++] = encodeMove(from, board.enpassant_square, -1, 1, 0, true, false);
+                    }
                 }
+            }
 
-                while (bishops > 0) {
-                    int from = __builtin_ctzll(bishops);
-                    bishops &= bishops - 1;
-                }1
+            int piece = (side == 0) ? 2 : -2;
+            while (knights > 0) {
+                int from = __builtin_ctzll(knights);
+                knights &= knights - 1;
 
-                while (knights > 0) {
-                    int from = __builtin_ctzll(knights);
-                    knights &= knights - 1;
+                uint64_t attacks = board.knightAttacks[from] & ~ownPieces;
+                while (attacks) {
+                    int to = __builtin_ctzll(attacks);
+                    attacks &= attacks - 1;
+
+                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
                 }
+            }
+        
+            piece = (side == 0) ? 3 : -3;
+            while (bishops > 0) {
+                int from = __builtin_ctzll(bishops);
+                bishops &= bishops - 1;
 
-                while (rooks > 0) {
-                    int from = __builtin_ctzll(rooks);
-                    rooks &= rooks - 1;
+                uint64_t attacks = board.getbishopAttacks(from, occ) & ~ownPieces;
+                while (attacks) {
+                    int to = __builtin_ctzll(attacks);
+                    attacks &= attacks - 1;
+
+                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
                 }
+            }
 
-                while (queens > 0) {
-                    int from = __builtin_ctzll(pawns);
-                    queens &= queens - 1;
+            piece = (side == 0) ? 4 : -4;
+            while (rooks > 0) {
+                int from = __builtin_ctzll(rooks);
+                rooks &= rooks - 1;
+
+                uint64_t attacks = board.getrookAttacks(from, occ) & ~ownPieces;
+                while (attacks) {
+                    int to = __builtin_ctzll(attacks);
+                    attacks &= attacks - 1;
+
+                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
                 }
+            }
 
-                while (king > 0) {
-                    int from = __builtin_ctzll(pawns);
-                    king &= king - 1;
-                } 
+            piece = (side == 0) ? 5 : -5;
+            while (queens > 0) {
+                int from = __builtin_ctzll(queens);
+                queens &= queens - 1;
+
+                uint64_t attacks = (board.getrookAttacks(from, occ) | board.getbishopAttacks(from, occ)) & ~ownPieces;
+                while (attacks) {
+                    int to = __builtin_ctzll(attacks);
+                    attacks &= attacks - 1;
+
+                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                }
+            }
+
+            piece = (side == 0) ? 6 : -6;
+            while (king > 0) {
+                int from = __builtin_ctzll(king);
+                king &= king - 1;
+
+                uint64_t attacks = board.kingAttacks[from] & ~ownPieces;
+                while (attacks) {
+                    int to = __builtin_ctzll(attacks);
+                    attacks &= attacks - 1;
+
+                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                }
             }
             
+            // castling stuff
+            if (side == 0) {
+                if (board.wkscr && !(occ & (1ULL << 5)) && !(occ & (1ULL << 6))
+                        && !board.isAttacked(4, 0) && !board.isAttacked(5, 0) && !board.isAttacked(6, 0))
+                    moves[nodes++] = encodeMove(4, 6, 6, 0, 0, false, true);
+
+                if (board.wqscr && !(occ & (1ULL << 3)) && !(occ & (1ULL << 2)) && !(occ & (1ULL << 1))
+                        && !board.isAttacked(4, 0) && !board.isAttacked(3, 0) && !board.isAttacked(2, 0))
+                    moves[nodes++] = encodeMove(4, 2, 6, 0, 0, false, true);
+            } 
             else {
-                uint64_t pawns = board.wPawns;      //
-                uint64_t bishops = board.wBishop;   //
-                uint64_t knights = board.wKnight;   //
-                uint64_t rooks = board.wRook;       //
-                uint64_t queens = board.wQueen;     //
-                uint64_t king = board.wKing;        //
+                if (board.bkscr && !(occ & (1ULL << 61)) && !(occ & (1ULL << 62))
+                        && !board.isAttacked(60, 1) && !board.isAttacked(61, 1) && !board.isAttacked(62, 1))
+                    moves[nodes++] = encodeMove(60, 62, -6, 0, 0, false, true);
 
-                while (pawns > 0) {
-                    int from = __builtin_ctzll(pawns);
-                    pawns &= pawns - 1;
-                }
-
-                while (bishops > 0) {
-                    int from = __builtin_ctzll(bishops);
-                    bishops &= bishops - 1;
-                }1
-
-                while (knights > 0) {
-                    int from = __builtin_ctzll(knights);
-                    knights &= knights - 1;
-                }
-
-                while (rooks > 0) {
-                    int from = __builtin_ctzll(rooks);
-                    rooks &= rooks - 1;
-                }
-
-                while (queens > 0) {
-                    int from = __builtin_ctzll(pawns);
-                    queens &= queens - 1;
-                }
-
-                while (king > 0) {
-                    int from = __builtin_ctzll(pawns);
-                    king &= king - 1;
-                } 
+                if (board.bqscr && !(occ & (1ULL << 59)) && !(occ & (1ULL << 58)) && !(occ & (1ULL << 57))
+                        && !board.isAttacked(60, 1) && !board.isAttacked(59, 1) && !board.isAttacked(58, 1))
+                    moves[nodes++] = encodeMove(60, 58, -6, 0, 0, false, true);
             }
-
+            
             return nodes;
         }
     private:
@@ -762,11 +937,16 @@ class UCI {
 };
 
 int main() {
-    UCI uci;
     Board board;
-    Eval eval;
-    moveGen moveGen;
+    board.initBoard();
+    board.loadFEN("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ");
 
+    moveGen mg(board);
 
+    // expected: depth1=20, depth2=400, depth3=8902, depth4=197281
+    for (int d = 1; d <= 10; d++) {
+        uint64_t result = mg.perft(d);
+        std::cout << "Depth " << d << ": " << result << "\n";
+    }
     return 0;
 }

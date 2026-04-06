@@ -65,10 +65,9 @@ class Board {
         uint64_t rookAttacks[102400];
         uint64_t bishopAttacks[5248];
 
-        int HistorySize = 4096;
         int HistoryIndex = 0;   
-        Move moveHistory[HistorySize];
-        BoardState stateHistory[HistorySize];
+        Move moveHistory[4096];
+        BoardState stateHistory[4096];
 
         bool initBoardRan = false;
 
@@ -138,7 +137,7 @@ class Board {
         // ========================= //
 
         void makeMove(Move move) {
-            if (HistoryIndex >= HistorySize) { std::cerr << "History overflow\n"; return; }
+            if (HistoryIndex >= 4096) { std::cerr << "History overflow\n"; return; }
             BoardState& currentState = stateHistory[HistoryIndex]; // Create a refence so modifying currentState will modify the stateHistory[]
             currentState.wqscr = wqscr;
             currentState.wkscr = wkscr;
@@ -385,11 +384,11 @@ class Board {
             else if (side == 1) { return isAttacked(__builtin_ctzll(bKing), side); }
             if (!wKing) {
                 std::cerr << "White king missing\n";
-                return;
+                return false;
             }
             if (!bKing) {
                 std::cerr << "White king missing\n";
-                return;
+                return false;
             }
             else { std::cerr << "King is in check returned neither in check or not in check!\n"; return false; }
         }
@@ -667,23 +666,7 @@ int main() {
     Board board;
     Eval eval;
     moveGen moveGen;
-
-    void printMove() {
-        std::cout << "White King Side Castle " << board.wkscr << std::endl;
-        std::cout << "White Queen Side Castle " << board.wqscr << std::endl;
-        std::cout << "Black King Side Castle " << board.bkscr << std::endl;
-        std::cout << "Black Queen Side Castle " << board.bqscr << std::endl;
-        std::cout << "Enpassant square " << board.enpassant_square << std::endl;
-        std::cout << "Half move clock " << board.halfmove_clock << std::endl;
-        std::cout << "Side " << board.side << std::endl;
-
-        
-
-    }
-
-    Move testmove;
-
-    testmove.
+    
 
     return 0;
 }

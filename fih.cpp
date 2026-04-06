@@ -2,6 +2,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <chrono>
 
 
 struct Move {
@@ -24,6 +25,10 @@ struct BoardState {
 
 class Board {
     public:
+        // ========================= //
+        // | Board class variables | //
+        // ========================= //
+
         int side = 0;
         int halfmove_clock = 0;
         int enpassent_square = -1;
@@ -128,7 +133,406 @@ class Board {
             58, 59, 59, 59, 59, 59, 59, 58
         };
 
-        void initBoard() {
+        // ========================= //
+        // | Board class functions | //
+        // ========================= //
+        
+        void makeMove(Move move) {
+            BoardState& currentState = stateHistory[HistoryIndex]; // Create a refence so modifying currentState will modify the stateHistory[]
+            currentState.wqscr = wqscr;
+            currentState.wkscr = wkscr;
+            currentState.bqscr = bqscr;
+            currentState.bkscr = bkscr;
+            currentState.moving = moving;
+
+            currentState.enpassent_square = enpassent_square;
+            currentState.halfmove_clock = halfmove_clock;
+
+            moveHistory[HistoryIndex] = move;
+            HistoryIndex++;
+
+            if (move.piece == 1 || move.piece == -1 || move.captured != 0) { halfmove_clock = 0;} 
+            else {halfmove_clock++;}
+
+            //remove moving piece from its square
+            switch(move.piece) {
+                case 1:
+                    wPawns &= ~(1ULL << move.from); break;
+                case -1:
+                    bPawns &= ~(1ULL << move.from); break;
+                case 2:
+                    wKnight &= ~(1ULL << move.from); break;
+                case -2:
+                    bKnight &= ~(1ULL << move.from); break;
+                case 3:
+                    wBishop &= ~(1ULL << move.from); break;
+                case -3:
+                    bBishop &= ~(1ULL << move.from); break;
+                case 4:
+                    wRook &= ~(1ULL << move.from); break;
+                case -4:
+                    bRook &= ~(1ULL << move.from); break;
+                case 5:
+                    wQueen &= ~(1ULL << move.from); break;
+                case -5:
+                    bQueen &= ~(1ULL << move.from); break;
+                case 6:
+                    wKing &= ~(1ULL << move.from); break;
+                case -6:
+                    bKing &= ~(1ULL << move.from); break;
+                case 0:
+                    std::cerr << "Error in switch(move.piece) inside makeMove(), no piece type 0 why the fuk is this shi making a move with no piece?"; break;
+                default:
+                    std::cerr << "Error in switch(move.piece) inside makeMove(), function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n";
+                    break;
+            }
+            //removing captured piece from square *if any* 
+            switch(move.captured) {
+                case 0:
+                    break;
+                case 1:
+                    wPawns &= ~(1ULL << move.to); break;
+                case -1:
+                    bPawns &= ~(1ULL << move.to); break;
+                case 2:
+                    wKnight &= ~(1ULL << move.to); break;
+                case -2:
+                    bKnight &= ~(1ULL << move.to); break;
+                case 3:
+                    wBishop &= ~(1ULL << move.to); break;
+                case -3:
+                    bBishop &= ~(1ULL << move.to); break;
+                case 4:
+                    wRook &= ~(1ULL << move.to); break;
+                case -4:
+                    bRook &= ~(1ULL << move.to); break;
+                case 5:
+                    wQueen &= ~(1ULL << move.to); break;
+                case -5:
+                    bQueen &= ~(1ULL << move.to); break;
+                case 6:
+                    wKing &= ~(1ULL << move.to); break;
+                case -6:
+                    bKing &= ~(1ULL << move.to); break;
+                default:
+                    std::cerr << "Uknown piece type in move.captured in makeMove(), value used -> " << move.captured << "\n";
+            }
+            //moving piece to its move square
+            switch(move.piece) {
+                case 1:
+                    wPawns |= (1ULL << move.to); break;
+                case -1:
+                    bPawns |= (1ULL << move.to); break;
+                case 2:
+                    wKnight |= (1ULL << move.to); break;
+                case -2:
+                    bKnight |= (1ULL << move.to); break;
+                case 3:
+                    wBishop |= (1ULL << move.to); break;
+                case -3:
+                    bBishop |= (1ULL << move.to); break;
+                case 4:
+                    wRook |= (1ULL << move.to); break;
+                case -4:
+                    bRook |= (1ULL << move.to); break;
+                case 5:
+                    wQueen |= (1ULL << move.to); break;
+                case -5:
+                    bQueen |= (1ULL << move.to); break;
+                case 6:
+                    wKing |= (1ULL << move.to); break;
+                case -6:
+                    bKing |= (1ULL << move.to); break;
+                case 0:
+                    std::cerr << "Error in switch(move.piece) no piece type 0 why the fuk is this shi making a move with no piece?"; break;
+                default:
+                    std::cerr << "Error in switch(move.piece) inside makeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n";
+                    break;
+            }
+            //deal with en passent (at least some of the logic)
+            if (move.enPassant == true) {
+                if (moving == 0) { bPawns &= ~(1ULL << (move.to - 8)); } 
+                else { wPawns &= ~(1ULL << (move.to + 8)); }
+            }
+
+            //deal with castling
+            if (move.castle == true) {
+                if (moving == 0) {
+                    if (move.to - move.from > 0) {
+                        wRook &= ~(1ULL << 7);
+                        wRook |= (1ULL << 5);
+                    }
+                    else {
+                        wRook &= ~(1ULL);
+                        wRook |= (1ULL << 3);
+                    }
+                    wqscr = false;
+                    wkscr = false;
+                }
+                else {
+                    if (move.to - move.from > 0) {
+                        bRook &= ~(1ULL << 63);
+                        bRook |= (1ULL << 61);
+                    }
+                    else {
+                        bRook &= ~(1ULL << 56);
+                        bRook |= (1ULL << 59);
+                    }
+                    bqscr = false;
+                    bkscr = false;
+                }
+            }
+            //update castling rules if rook or king move or rook taken
+            if (move.from == 4)  { wkscr = false; wqscr = false; } // white king moved
+            if (move.from == 60) { bkscr = false; bqscr = false; } // black king moved
+            if (move.from == 0  || move.to == 0)  wqscr = false;   // a1 rook
+            if (move.from == 7  || move.to == 7)  wkscr = false;   // h1 rook
+            if (move.from == 56 || move.to == 56) bqscr = false;   // a8 rook
+            if (move.from == 63 || move.to == 63) bkscr = false;   // h8 rook
+
+            //handle promtion pieces
+            if (move.promotion != 0) {
+                if (moving == 0) { wPawns &= ~(1ULL << move.to); }
+                else { bPawns &= ~(1ULL << move.to); }
+                switch(move.promotion) {
+                        case 5:
+                            wQueen |= (1ULL << move.to); break;
+                        case -5:
+                            bQueen |= (1ULL << move.to); break;
+                        case 4:
+                            wRook |= (1ULL << move.to); break;
+                        case -4:
+                            bRook |= (1ULL << move.to); break;
+                        case 3:
+                            wBishop |= (1ULL << move.to); break;
+                        case -3:
+                            bBishop |= (1ULL << move.to); break;
+                        case 2:
+                            wKnight |= (1ULL << move.to); break;
+                        case -2:
+                            bKnight |= (1ULL << move.to); break;      
+                }
+            }
+            //update enpassant rules
+            enpassent_square = -1;
+            if ((move.piece == 1) && (move.to - move.from == 16)) {
+                enpassent_square = move.from + 8;
+            }
+            else if ((move.piece == -1) && (move.from - move.to == 16)) {
+                enpassent_square = move.from - 8;
+            }
+
+            if (moving == 0) {moving = 1;} 
+            else if (moving == 1) {moving = 0;}
+            else {std::cerr << "moving variable is neither 1 or 0! \n";}
+        }
+
+        void unmakeMove() {
+            HistoryIndex--;
+            Move& move = moveHistory[HistoryIndex];
+            BoardState& previousState = stateHistory[HistoryIndex];
+
+            wqscr = previousState.wqscr;
+            wkscr = previousState.wkscr;
+            bqscr = previousState.bqscr;
+            bkscr = previousState.bkscr;
+            moving = previousState.moving;
+
+            halfmove_clock = previousState.halfmove_clock;
+            enpassent_square = previousState.enpassent_square;
+
+
+            //undo pawn promotion
+            if (move.promotion != 0) {
+                switch(move.promotion) {
+                        case 5:
+                            wQueen &= ~(1ULL << move.to); break;
+                        case -5:
+                            bQueen &= ~(1ULL << move.to); break;
+                        case 4:
+                            wRook &= ~(1ULL << move.to); break;
+                        case -4:
+                            bRook &= ~(1ULL << move.to); break;
+                        case 3:
+                            wBishop &= ~(1ULL << move.to); break;
+                        case -3:
+                            bBishop &= ~(1ULL << move.to); break;
+                        case 2:
+                            wKnight &= ~(1ULL << move.to); break;
+                        case -2:
+                            bKnight &= ~(1ULL << move.to); break;      
+                }
+                if (moving == 0) wPawns |= (1ULL << move.from);
+                else bPawns |= (1ULL << move.from);
+            }
+            else {
+                //remove the piece from its destination square
+                switch(move.piece) {
+                    case 1:
+                        wPawns &= ~(1ULL << move.to); break;
+                    case -1:
+                        bPawns &= ~(1ULL << move.to); break;
+                    case 2:
+                        wKnight &= ~(1ULL << move.to); break;
+                    case -2:
+                        bKnight &= ~(1ULL << move.to); break;
+                    case 3:
+                        wBishop &= ~(1ULL << move.to); break;
+                    case -3:
+                        bBishop &= ~(1ULL << move.to); break;
+                    case 4:
+                        wRook &= ~(1ULL << move.to); break;
+                    case -4:
+                        bRook &= ~(1ULL << move.to); break;
+                    case 5:
+                        wQueen &= ~(1ULL << move.to); break;
+                    case -5:
+                        bQueen &= ~(1ULL << move.to); break;
+                    case 6:
+                        wKing &= ~(1ULL << move.to); break;
+                    case -6:
+                        bKing &= ~(1ULL << move.to); break;
+                    case 0:
+                        std::cerr << "Error in switch(move.piece) in unmakeMove() no piece type 0 why the fuk is this shi making a move with no piece?"; break;
+                    default:
+                        std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n";
+                        break;
+                }
+
+                //add back any captured piece to the board
+                switch(move.captured) {
+                    case 0:
+                        break;
+                    case 1:
+                        wPawns |= (1ULL << move.to); break;
+                    case -1:
+                        bPawns |= (1ULL << move.to); break;
+                    case 2:
+                        wKnight |= (1ULL << move.to); break;
+                    case -2:
+                        bKnight |= (1ULL << move.to); break;
+                    case 3:
+                        wBishop |= (1ULL << move.to); break;
+                    case -3:
+                        bBishop |= (1ULL << move.to); break;
+                    case 4:
+                        wRook |= (1ULL << move.to); break;
+                    case -4:
+                        bRook |= (1ULL << move.to); break;
+                    case 5:
+                        wQueen |= (1ULL << move.to); break;
+                    case -5:
+                        bQueen |= (1ULL << move.to); break;
+                    case 6:
+                        wKing |= (1ULL << move.to); break;
+                    case -6:
+                        bKing |= (1ULL << move.to); break;
+                    default:
+                        std::cerr << "Uknown piece type in move.captured in unmakeMove(), value used -> " << move.captured << "\n";
+                }
+
+                //bring the moved piece back to its orginal square
+                switch(move.piece) {
+                    case 1:
+                        wPawns |= (1ULL << move.from); break;
+                    case -1:
+                        bPawns |= (1ULL << move.from); break;
+                    case 2:
+                        wKnight |= (1ULL << move.from); break;
+                    case -2:
+                        bKnight |= (1ULL << move.from); break;
+                    case 3:
+                        wBishop |= (1ULL << move.from); break;
+                    case -3:
+                        bBishop |= (1ULL << move.from); break;
+                    case 4:
+                        wRook |= (1ULL << move.from); break;
+                    case -4:
+                        bRook |= (1ULL << move.from); break;
+                    case 5:
+                        wQueen |= (1ULL << move.from); break;
+                    case -5:
+                        bQueen |= (1ULL << move.from); break;
+                    case 6:
+                        wKing |= (1ULL << move.from); break;
+                    case -6:
+                        bKing |= (1ULL << move.from); break;
+                    case 0:
+                        std::cerr << "Error in switch(move.piece) inside unmakeMove() no piece type 0 why the fuk is this shi making a move with no piece?"; break;
+                    default:
+                        std::cerr << "Error in switch(move.piece) inside unmakeMove() function: Error move.piece is not between -6 or 1 value used -> " << move.piece << "\n";
+                        break;
+                }
+
+                //add back the pawn if en passant happened
+                if (move.enPassant == true) {
+                    if (moving == 1) { bPawns |= (1ULL << (move.to - 8)); }  // White moved, restore black pawn
+                    else { wPawns |= (1ULL << (move.to + 8)); }              // Black moved, restore white pawn
+                }
+            }
+            //undo castling if it happened
+            if (move.castle == true) {
+                if (moving == 1) {
+                    if (move.to - move.from > 0) {
+                        wRook |= (1ULL << 7);
+                        wRook &= ~(1ULL << 5);
+                    }
+                    else {
+                        wRook |= (1ULL);
+                        wRook &= ~(1ULL << 3);
+                    }
+                }
+                else {
+                    if (move.to - move.from > 0) {
+                        bRook |= (1ULL << 63);
+                        bRook &= ~(1ULL << 61);
+                    }
+                    else {
+                        bRook |= (1ULL << 56);
+                        bRook &= ~(1ULL << 59);
+                    }
+                }
+            }
+        }
+
+        bool isInCheck(int sq, int side) {
+            if (side == 0) { return isAttacked(__builtin_ctzll(wKing), side); }
+            else if (side == 1) { return isAttacked(__builtin_ctzll(bKing), side); }
+        }
+
+        bool isAttacked(int sq, int side) {
+            uint64_t occ = getOccupancy();
+            if (side == 0) {
+                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & bQueen) > 0) { return true; }
+                else if (((getrookAttacks(sq, occ)) & bRook) > 0) { return true; }
+                else if (((getbishopAttacks(sq, occ)) & bBishop) > 0) { return true; }
+                else if (((knightAttacks[sq]) & bKnight) > 0) { return true; }
+                else if (((pawnAttacksW[sq]) & bPawns) > 0) { return true; }
+            }
+            else if (side == 1) {
+                if ((((getrookAttacks(sq, occ)) | (getbishopAttacks(sq, occ))) & wQueen) > 0) { return true; }
+                else if (((getrookAttacks(sq, occ)) & wRook) > 0) { return true; }
+                else if (((getbishopAttacks(sq, occ)) & wBishop) > 0) { return true; }
+                else if (((knightAttacks[sq]) & wKnight) > 0) { return true; }
+                else if (((pawnAttacksB[sq]) & wPawns) > 0) { return true; }
+            }
+            else { std::cerr << "Error in isAttacked() moving is " << side << "\n";}
+            return false;
+        }
+
+        void LongPrint(uint64_t board) {
+            std::cout << "------------------\n";
+            for (int row = 7; row >= 0; row--) {
+                for (int col = 0; col < 8; col++) {
+                    int sq = row * 8 + col;
+                    std::cout << ((board >> sq) & 1) << " ";
+                }
+                std::cout << "\n";
+            }
+            std::cout << "\n";
+        }
+
+        void initBoard() { 
             if (initBoardRand == false) { initBoardRan = true; }
             else {std::cerr << "Function initBoard has already been ran before!\n";}
             uint64_t temp_val = 1;
@@ -172,13 +576,143 @@ class Board {
                     }
                 }
                 else{ kingAttacks[i] = (temp_val >> 1 | temp_val << 1) | ((temp_val << 7 | temp_val << 8 | temp_val << 9) | (temp_val >> 7 | temp_val >> 8 | temp_val >> 9)); }
+
+            //Knight
+            for (int sq = 0; sq < 64; sq++) {
+                knightAttacks[sq] = 0;
+                int r = sq / 8;
+                int f = sq % 8;
+
+                int moves[8][2] = {
+                    {2, 1}, {2, -1}, {-2, 1}, {-2, -1},
+                    {1, 2}, {1, -2}, {-1, 2}, {-1, -2}
+                };
+
+                for (int i = 0; i < 8; i++) {
+                    int tr = r + moves[i][0];
+                    int tf = f + moves[i][1];
+                    if (tr >= 0 && tr <= 7 && tf >= 0 && tf <= 7) {
+                        knightAttacks[sq] |= (1ULL << (tr * 8 + tf));
+                    }
+                }
+            }
+
+            //Rook, Bishops Masks
+            for (int i = 0; i < 64; i++) { //Rooks
+                int r = i / 8;
+                int f = i % 8;  
+                uint64_t temp_mask = 0;
+                for (int up    = r + 1; up <= 6;   up++)   temp_mask |= 1ULL << (up * 8 + f);
+                for (int down  = r - 1; down >= 1; down--) temp_mask |= 1ULL << (down * 8 + f);
+                for (int right = f + 1; right <= 6; right++) temp_mask |= 1ULL << (r * 8 + right);
+                for (int left  = f - 1; left >= 1;  left--) temp_mask |= 1ULL << (r * 8 + left);
+                rookMasks[i] = temp_mask;
+            }
+            for (int i = 0; i < 64; i++) { //Bishops
+                int r = i / 8;
+                int f = i % 8;
+                uint64_t temp_mask = 0;
+                for (int tr = r + 1, tf = f + 1; tr <= 6 && tf <= 6; tr++, tf++) temp_mask |= 1ULL << (tr * 8 + tf); 
+                for (int tr = r + 1, tf = f - 1; tr <= 6 && tf >= 1; tr++, tf--) temp_mask |= 1ULL << (tr * 8 + tf); 
+                for (int tr = r - 1, tf = f + 1; tr >= 1 && tf <= 6; tr--, tf++) temp_mask |= 1ULL << (tr * 8 + tf);
+                for (int tr = r - 1, tf = f - 1; tr >= 1 && tf >= 1; tr--, tf--) temp_mask |= 1ULL << (tr * 8 + tf);
+                bishopMasks[i] = temp_mask;
+            }
+
+            fillBishopAttacks();
+            fillRookAttacks();
         }
 
+        uint64_t getOccupancy() {
+            return (wPawns | wBishop | wKnight | wRook | wQueen | wKing) | (bPawns | bBishop | bKnight | bRook | bQueen | bKing);
+        }
 
+        uint64_t getOccupancyWhite() {
+            return wPawns | wBishop | wKnight | wRook | wQueen | wKing;
+        }
 
+        uint64_t getOccupancyBlack() {
+            return bPawns | bBishop | bKnight | bRook | bQueen | bKing;
+        }
+
+        uint64_t getrookAttacks(int sq, uint64_t occ) {
+            occ &= rookMasks[sq];
+            occ *= rookMagics[sq];
+            occ >>= rookShifts[sq];
+            return rookAttacks[rookOffsets[sq] + occ];
+        }
+
+        uint64_t getbishopAttacks(int sq, uint64_t occ) {
+            occ &= bishopMasks[sq];
+            occ *= bishopMagics[sq];
+            occ >>= bishopShifts[sq];
+            return bishopAttacks[bishopOffsets[sq] + occ];
+        }
 
     private:
+        uint64_t indexToOccupancy(int index, int numBits, uint64_t mask) {
+            uint64_t occupancy = 0;
+            for (int i = 0; i < numBits; i++) {
+                int bitPos = __builtin_ctzll(mask);
+                mask &= mask - 1;
+                if (index & (1 << i)) { occupancy |= (1ULL << bitPos); }
+            }
+            return occupancy;
+        }
+        
+        uint64_t computeRookAttacks(int sq, uint64_t occ) {
+            uint64_t attacks = 0;
+            int r = sq / 8;
+            int f = sq % 8;
 
+            for (int i = r + 1; i <= 7; i++) { attacks |= (1ULL << (i * 8 + f)); if (occ & (1ULL << (i * 8 + f))) break; }
+            for (int i = r - 1; i >= 0; i--) { attacks |= (1ULL << (i * 8 + f)); if (occ & (1ULL << (i * 8 + f))) break; }
+            for (int j = f + 1; j <= 7; j++) { attacks |= (1ULL << (r * 8 + j)); if (occ & (1ULL << (r * 8 + j))) break; }
+            for (int j = f - 1; j >= 0; j--) { attacks |= (1ULL << (r * 8 + j)); if (occ & (1ULL << (r * 8 + j))) break; }
+
+            return attacks;
+        }
+
+        uint64_t computeBishopAttacks(int sq, uint64_t occ) {
+            uint64_t attacks = 0;
+            int r = sq / 8;
+            int f = sq % 8;
+
+            for (int tr = r + 1, tf = f + 1; tr <= 7 && tf <= 7; tr++, tf++) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+            for (int tr = r + 1, tf = f - 1; tr <= 7 && tf >= 0; tr++, tf--) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+            for (int tr = r - 1, tf = f + 1; tr >= 0 && tf <= 7; tr--, tf++) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+            for (int tr = r - 1, tf = f - 1; tr >= 0 && tf >= 0; tr--, tf--) { attacks |= 1ULL << (tr * 8 + tf); if (occ & (1ULL << (tr * 8 + tf))) break; }
+
+            return attacks;
+        }
+
+        void fillRookAttacks() {
+            for (int sq = 0; sq < 64; sq++) {
+                int numBits = 64 - rookShifts[sq];
+                int numConfigs = 1 << numBits;
+
+                for (int index = 0; index < numConfigs; index++) {
+                    uint64_t occ = indexToOccupancy(index, numBits, rookMasks[sq]);
+                    uint64_t magicIndex = (occ * rookMagics[sq]) >> rookShifts[sq];
+                    uint64_t attacks = computeRookAttacks(sq, occ);
+                    rookAttacks[rookOffsets[sq] + magicIndex] = attacks;
+                }
+            }
+        }
+
+        void fillBishopAttacks() {
+            for (int sq = 0; sq < 64; sq++) {
+                int numBits = 64 - bishopShifts[sq];
+                int numConfigs = 1 << numBits;
+
+                for (int index = 0; index < numConfigs; index++) {
+                    uint64_t occ = indexToOccupancy(index, numBits, bishopMasks[sq]);
+                    uint64_t magicIndex = (occ * bishopMagics[sq]) >> bishopShifts[sq];
+                    uint64_t attacks = computeBishopAttacks(sq, occ);
+                    bishopAttacks[bishopOffsets[sq] + magicIndex] = attacks;
+                }
+            }
+        }
 };
 
 class moveGen {

@@ -686,7 +686,7 @@ class moveGen {
             if (depth == 0) return 1;
 
             uint32_t moves[256];
-            int count = generateMoves(moves);
+            int count = generateMoves(moves, false);
             uint64_t nodes = 0;
 
             for (int i = 0; i < count; i++) {
@@ -705,7 +705,7 @@ class moveGen {
 
         void perftDivide(int depth) {
             uint32_t moves[256];
-            int count = generateMoves(moves);
+            int count = generateMoves(moves, false);
             uint64_t total = 0;
 
             for (int i = 0; i < count; i++) {
@@ -733,7 +733,7 @@ class moveGen {
             std::cout << "Total: " << total << "\n";
         }
         
-        int generateMoves(uint32_t* moves) {
+        int generateMoves(uint32_t* moves, bool capturesOnly) {
             int nodes = 0;
             int side = board.side;
 
@@ -840,8 +840,9 @@ class moveGen {
                 while (attacks) {
                     int to = __builtin_ctzll(attacks);
                     attacks &= attacks - 1;
-
-                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    uint32_t move = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    if (capturesOnly && !isCapture(move)) continue; //if capture only condition is set then remove everything that is not a capture.
+                    moves[nodes++] = move;
                 }
             }
         
@@ -853,9 +854,10 @@ class moveGen {
                 uint64_t attacks = board.getbishopAttacks(from, occ) & ~ownPieces;
                 while (attacks) {
                     int to = __builtin_ctzll(attacks);
-                    attacks &= attacks - 1;
-
-                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    attacks &= attacks - 1;\
+                    uint32_t move = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    if (capturesOnly && !isCapture(move)) continue; //if capture only condition is set then remove everything that is not a capture.
+                    moves[nodes++] = move;
                 }
             }
 
@@ -868,8 +870,9 @@ class moveGen {
                 while (attacks) {
                     int to = __builtin_ctzll(attacks);
                     attacks &= attacks - 1;
-
-                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    uint32_t move = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    if (capturesOnly && !isCapture(move)) continue; //if capture only condition is set then remove everything that is not a capture.
+                    moves[nodes++] = move;
                 }
             }
 
@@ -882,8 +885,9 @@ class moveGen {
                 while (attacks) {
                     int to = __builtin_ctzll(attacks);
                     attacks &= attacks - 1;
-
-                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    uint32_t move = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    if (capturesOnly && !isCapture(move)) continue; //if capture only condition is set then remove everything that is not a capture.
+                    moves[nodes++] = move;
                 }
             }
 
@@ -896,8 +900,9 @@ class moveGen {
                 while (attacks) {
                     int to = __builtin_ctzll(attacks);
                     attacks &= attacks - 1;
-
-                    moves[nodes++] = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    uint32_t move = encodeMove(from, to, piece, board.getPieceAt(to), 0, false, false);
+                    if (capturesOnly && !isCapture(move)) continue; //if capture only condition is set then remove everything that is not a capture.
+                    moves[nodes++] = move;
                 }
             }
             
@@ -905,20 +910,20 @@ class moveGen {
             if (side == 0) {
                 if (board.wkscr && !(occ & (1ULL << 5)) && !(occ & (1ULL << 6))
                         && !board.isAttacked(4, 0) && !board.isAttacked(5, 0) && !board.isAttacked(6, 0))
-                    moves[nodes++] = encodeMove(4, 6, 6, 0, 0, false, true);
+                    if (!capturesOnly) { moves[nodes++] = encodeMove(4, 6, 6, 0, 0, false, true); } //if capture only condition is set then remove everything that is not a capture.
 
                 if (board.wqscr && !(occ & (1ULL << 3)) && !(occ & (1ULL << 2)) && !(occ & (1ULL << 1))
                         && !board.isAttacked(4, 0) && !board.isAttacked(3, 0) && !board.isAttacked(2, 0))
-                    moves[nodes++] = encodeMove(4, 2, 6, 0, 0, false, true);
+                    if (!capturesOnly) { moves[nodes++] = encodeMove(4, 2, 6, 0, 0, false, true); } //if capture only condition is set then remove everything that is not a capture.
             } 
             else {
                 if (board.bkscr && !(occ & (1ULL << 61)) && !(occ & (1ULL << 62))
                         && !board.isAttacked(60, 1) && !board.isAttacked(61, 1) && !board.isAttacked(62, 1))
-                    moves[nodes++] = encodeMove(60, 62, -6, 0, 0, false, true);
+                    if (!capturesOnly) { moves[nodes++] = encodeMove(60, 62, -6, 0, 0, false, true); } //if capture only condition is set then remove everything that is not a capture.
 
                 if (board.bqscr && !(occ & (1ULL << 59)) && !(occ & (1ULL << 58)) && !(occ & (1ULL << 57))
                         && !board.isAttacked(60, 1) && !board.isAttacked(59, 1) && !board.isAttacked(58, 1))
-                    moves[nodes++] = encodeMove(60, 58, -6, 0, 0, false, true);
+                    if (!capturesOnly) { moves[nodes++] = encodeMove(60, 58, -6, 0, 0, false, true); } //if capture only condition is set then remove everything that is not a capture.
             }
             
             return nodes;
@@ -927,27 +932,388 @@ class moveGen {
     
 };
 
-class Search {
+class Eval {
     public:
+        Board& board;
+        Eval(Board& b) : board(b) {}
+
+        int pawnPTS[64] = {
+            0,  0,  0,  0,  0,  0,  0,  0,
+            50, 50, 50, 50, 50, 50, 50, 50,
+            10, 10, 20, 30, 30, 20, 10, 10,
+            5,  5, 10, 25, 25, 10,  5,  5,
+            0,  0,  0, 20, 20,  0,  0,  0,
+            5, -5,-10,  0,  0,-10, -5,  5,
+            5, 10, 10,-20,-20, 10, 10,  5,
+            0,  0,  0,  0,  0,  0,  0,  0
+        };
+
+        int knightPTS[64] = {
+            -50,-40,-30,-30,-30,-30,-40,-50,
+            -40,-20,  0,  0,  0,  0,-20,-40,
+            -30,  0, 10, 15, 15, 10,  0,-30,
+            -30,  5, 15, 20, 20, 15,  5,-30,
+            -30,  0, 15, 20, 20, 15,  0,-30,
+            -30,  5, 10, 15, 15, 10,  5,-30,
+            -40,-20,  0,  5,  5,  0,-20,-40,
+            -50,-40,-30,-30,-30,-30,-40,-50
+        };
+
+        int bishopPTS[64] = {
+            -20,-10,-10,-10,-10,-10,-10,-20,
+            -10,  0,  0,  0,  0,  0,  0,-10,
+            -10,  0,  5, 10, 10,  5,  0,-10,
+            -10,  5,  5, 10, 10,  5,  5,-10,
+            -10,  0, 10, 10, 10, 10,  0,-10,
+            -10, 10, 10, 10, 10, 10, 10,-10,
+            -10,  5,  0,  0,  0,  0,  5,-10,
+            -20,-10,-10,-10,-10,-10,-10,-20
+        };
+
+        int rookPTS[64] = {
+            0,  0,  0,  0,  0,  0,  0,  0,
+            5, 10, 10, 10, 10, 10, 10,  5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            0,  0,  0,  5,  5,  0,  0,  0
+        };
+
+        int queenPTS[64] = {
+            -20,-10,-10, -5, -5,-10,-10,-20,
+            -10,  0,  0,  0,  0,  0,  0,-10,
+            -10,  0,  5,  5,  5,  5,  0,-10,
+            -5,  0,  5,  5,  5,  5,  0, -5,
+            0,  0,  5,  5,  5,  5,  0, -5,
+            -10,  5,  5,  5,  5,  5,  0,-10,
+            -10,  0,  5,  0,  0,  0,  0,-10,
+            -20,-10,-10, -5, -5,-10,-10,-20
+        };
+
+        int kingPTS[64] = {
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -30,-40,-40,-50,-50,-40,-40,-30,
+            -20,-30,-30,-40,-40,-30,-30,-20,
+            -10,-20,-20,-20,-20,-20,-20,-10,
+            20, 20,  0,  0,  0,  0, 20, 20,
+            20, 30, 10,  0,  0, 10, 30, 20
+        };
+
+        int kingPTE[64] = {
+            -50,-40,-30,-20,-20,-30,-40,-50,
+            -30,-20,-10,  0,  0,-10,-20,-30,
+            -30,-10, 20, 30, 30, 20,-10,-30,
+            -30,-10, 30, 40, 40, 30,-10,-30,
+            -30,-10, 30, 40, 40, 30,-10,-30,
+            -30,-10, 20, 30, 30, 20,-10,-30,
+            -30,-30,  0,  0,  0,  0,-30,-30,
+            -50,-30,-30,-30,-30,-30,-30,-50
+        };
+
+        int indexTableWhite[64] = {
+            56, 57, 58, 59, 60, 61, 62, 63,
+            48, 49, 50, 51, 52, 53, 54, 55,
+            40, 41, 42, 43, 44, 45, 46, 47,
+            32, 33, 34, 35, 36, 37, 38, 39,
+            24, 25, 26, 27, 28, 29, 30, 31,
+            16, 17, 18, 19, 20, 21, 22, 23,
+            8,  9,  10, 11, 12, 13, 14, 15,
+            0,  1,  2,  3,  4,  5,  6,  7
+        };
+
+        int indexTableBlack[64] = {
+            7,  6,  5,  4,  3,  2,  1,  0,
+            15, 14, 13, 12, 11, 10,  9,  8,
+            23, 22, 21, 20, 19, 18, 17, 16,
+            31, 30, 29, 28, 27, 26, 25, 24,
+            39, 38, 37, 36, 35, 34, 33, 32,
+            47, 46, 45, 44, 43, 42, 41, 40,
+            55, 54, 53, 52, 51, 50, 49, 48,
+            63, 62, 61, 60, 59, 58, 57, 56
+        };
+
+        int getPieceValue(int sq, int type) {
+            switch(type) {
+                case 1: return pawnVal + pawnPTS[indexTableWhite[sq]];
+                case 2: return knightVal + knightPTS[indexTableWhite[sq]];
+                case 3: return bishopVal + bishopPTS[indexTableWhite[sq]];
+                case 4: return rookVal + rookPTS[indexTableWhite[sq]];
+                case 5: return queenVal + queenPTS[indexTableWhite[sq]];
+                case 6: return kingPTS[indexTableWhite[sq]];
+                case -1: return pawnVal + pawnPTS[indexTableBlack[sq]];
+                case -2: return knightVal + knightPTS[indexTableBlack[sq]];
+                case -3: return bishopVal + bishopPTS[indexTableBlack[sq]];
+                case -4: return rookVal + rookPTS[indexTableBlack[sq]];
+                case -5: return queenVal + queenPTS[indexTableBlack[sq]];
+                case -6: return kingPTS[indexTableBlack[sq]];
+                default: return 0;
+            }
+        }
+
+
+        const int pawnVal = 100;
+        const int knightVal = 300;
+        const int bishopVal = 330;
+        const int rookVal = 500;
+        const int queenVal = 900;
+
+
+        int evaluate() {
+            int value = 0;
+
+            uint64_t wpawns = board.wPawns;
+            uint64_t wknight = board.wKnight;
+            uint64_t wbishop = board.wBishop;
+            uint64_t wrook = board.wRook;
+            uint64_t wqueen = board.wQueen;
+            uint64_t wking = board.wKing;
+
+            uint64_t bpawns = board.bPawns;
+            uint64_t bknight = board.bKnight;
+            uint64_t bbishop = board.bBishop;
+            uint64_t brook = board.bRook;
+            uint64_t bqueen = board.bQueen;
+            uint64_t bking = board.bKing;
+
+            while (wpawns > 0) {
+                int sq = __builtin_ctzll(wpawns);
+                wpawns &= wpawns - 1;
+                value += getPieceValue(sq, 1);
+            }
+
+            while (wknight > 0) {
+                int sq = __builtin_ctzll(wknight);
+                wknight &= wknight - 1;
+                value += getPieceValue(sq, 2);
+            }
+
+            while (wbishop > 0) {
+                int sq = __builtin_ctzll(wbishop);
+                wbishop &= wbishop - 1;
+                value += getPieceValue(sq, 3);
+            }
+
+            while (wrook > 0) {
+                int sq = __builtin_ctzll(wrook);
+                wrook &= wrook - 1;
+                value += getPieceValue(sq, 4);
+            }
+
+            while (wqueen > 0) {
+                int sq = __builtin_ctzll(wqueen);
+                wqueen &= wqueen - 1;
+                value += getPieceValue(sq, 5);
+            }
+
+            while (wking > 0) {
+                int sq = __builtin_ctzll(wking);
+                wking &= wking - 1;
+                value += getPieceValue(sq, 6);
+            }
+
+
+            while (bpawns > 0) {
+                int sq = __builtin_ctzll(bpawns);
+                bpawns &= bpawns - 1;
+                value -= getPieceValue(sq, -1);
+            }
+
+            while (bknight > 0) {
+                int sq = __builtin_ctzll(bknight);
+                bknight &= bknight - 1;
+                value -= getPieceValue(sq, -2);
+            }
+
+            while (bbishop > 0) {
+                int sq = __builtin_ctzll(bbishop);
+                bbishop &= bbishop - 1;
+                value -= getPieceValue(sq, -3);
+            }
+
+            while (brook > 0) {
+                int sq = __builtin_ctzll(brook);
+                brook &= brook - 1;
+                value -= getPieceValue(sq, -4);
+            }
+
+            while (bqueen > 0) {
+                int sq = __builtin_ctzll(bqueen);
+                bqueen &= bqueen - 1;
+                value -= getPieceValue(sq, -5);
+            }
+
+            while (bking > 0) {
+                int sq = __builtin_ctzll(bking);
+                bking &= bking - 1;
+                value -= getPieceValue(sq, -6);
+            }
+            
+            return value;
+        }
 
     private:
     
 };
 
-class Eval {
+class Search {
     public:
+        Board& board;
+        moveGen& mg;
+        Eval& eval;
+        Search(Board& b, moveGen& m, Eval& e) : board(b), mg(m), eval(e) {}
+
+        uint32_t bestMove = 0;
+        static const int INF = 99999999;
+        uint64_t nodes = 0;
+
+        int scoreMoves(uint32_t move) {
+            int captured = getCaptured(move);
+            int attacker = getPiece(move);
+            int from = getFrom(move);
+
+            if (captured != 0) {
+                return 10 * eval.getPieceValue(from, captured) - eval.getPieceValue(from, attacker);
+            }
+
+            if (isPromotion(move)) {
+                return 8000;
+            }
+
+            return 0;
+        }
+
+        void orderMoves(uint32_t* moves, int nodes) {
+            for (int i = 0; i < nodes; i++) {
+               int best = i;
+               int bestScore = scoreMoves(moves[i]);
+
+               for (int j = i + 1; j < nodes; j++) {
+                    int s = scoreMoves(moves[j]);
+                    if (s > bestScore) {
+                        bestScore = s;
+                        best = j;
+                    }
+                }
+
+                if (best != i) {
+                    std::swap(moves[i], moves[best]);
+                }
+            }
+        }
+
+        int quiescence(int alpha, int beta, int qdepth = 0) {
+            nodes++;
+            if (qdepth >= 12) {
+                int e = eval.evaluate();
+                return (board.side == 0) ? e : -e;
+            }
+
+            int evaluation = eval.evaluate();
+            if (board.side == 1) evaluation = -evaluation;
+
+            if (evaluation >= beta) return beta;
+            if (evaluation > alpha) alpha = evaluation;
+
+            uint32_t moves[256];
+            int count = mg.generateMoves(moves, true);
+            orderMoves(moves, count);
+
+            bool hasLegal = false;
+            for (int i = 0; i < count; i++) {
+                board.makeMove(moves[i]);
+                if (board.isInCheck(board.side ^ 1)) { board.unmakeMove(); continue; }
+                hasLegal = true;
+                board.unmakeMove();
+                break;
+            }
+            if (!hasLegal) {
+                if (board.isInCheck(board.side)) return -INF;
+                return 0;
+            }
+
+            for (int i = 0; i < count; i++) {
+                if (!isCapture(moves[i])) continue;
+                board.makeMove(moves[i]);
+                if (board.isInCheck(board.side ^ 1)) { board.unmakeMove(); continue; }
+                int score = -quiescence(-beta, -alpha, qdepth + 1);
+                board.unmakeMove();
+                if (score >= beta) return beta;
+                if (score > alpha) alpha = score;
+            }
+
+            return alpha;
+        }
+
+        int search(int depth, int alpha, int beta) {
+            nodes++;
+            if (depth == 0) return quiescence(alpha, beta);
+            
+            uint32_t moves[256];
+            int count = mg.generateMoves(moves, false);
+            orderMoves(moves, count);
+
+            int bestEval = -INF;
+            bool hasLegal = false;
+
+            for (int i = 0; i < count; i++) {
+                board.makeMove(moves[i]);
+                if (board.isInCheck(board.side ^ 1)) { board.unmakeMove(); continue; }
+
+                hasLegal = true;
+                int evaluation = -search(depth - 1, -beta, -alpha);
+                board.unmakeMove();
+
+                if (evaluation > bestEval) {
+                    bestEval = evaluation;
+                    if (depth == rootDepth) bestMove = moves[i];
+                }
+                if (evaluation >= beta) return beta;
+                if (evaluation > alpha) alpha = evaluation;
+            }
+
+            if (!hasLegal) {
+                if (board.isInCheck(board.side)) return -(INF + depth);
+                return 0;
+            }
+
+            return alpha;
+        }
+
+        uint32_t getBestMove(int depth) {
+            rootDepth = depth;
+            bestMove = 0;
+            nodes = 0;
+
+            auto start = std::chrono::steady_clock::now();
+            int score = search(depth, -INF, INF);
+            auto end = std::chrono::steady_clock::now();
+            int ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+            std::cout << "info depth " << depth
+                      << " score cp " << score
+                      << " nodes " << nodes
+                      << " time " << ms 
+                      << " eval " << eval.evaluate() <<"\n";
+
+            return bestMove;
+        }
 
     private:
-    
+        int rootDepth = 0;
 };
 
 class UCI {
     public:
         Board& board;
         moveGen& mg;
+        Search& search;
         std::string line;
 
-        UCI(Board& b, moveGen& m) : board(b), mg(m) {}
+        UCI(Board& b, moveGen& m, Search& s) : board(b), mg(m), search(s) {}
 
         void uciLoop() {
             while (true) {
@@ -983,7 +1349,6 @@ class UCI {
 
     private:
         uint32_t parseMove(const std::string& token) {
-            // token is like "e2e4" or "e7e8q"
             int fromFile = token[0] - 'a';
             int fromRank = token[1] - '1';
             int toFile   = token[2] - 'a';
@@ -995,7 +1360,7 @@ class UCI {
             int promoChar = (token.size() == 5) ? token[4] : 0;
 
             uint32_t moves[256];
-            int count = mg.generateMoves(moves);
+            int count = mg.generateMoves(moves, false);
 
             for (int i = 0; i < count; i++) {
                 if (getFrom(moves[i]) == from && getTo(moves[i]) == to) {
@@ -1011,7 +1376,6 @@ class UCI {
             }
             return 0;
         }
-
 
         void parsePosition(const std::string& line) {
             std::istringstream ss(line);
@@ -1041,10 +1405,9 @@ class UCI {
         void parseGo(const std::string& line) {
             std::istringstream ss(line);
             std::string token;
-            ss >> token; // consume "go"
+            ss >> token; 
 
-            // parse parameters for later when search exists
-            int depth = 4;
+            int depth = 8;
             while (ss >> token) {
                 if (token == "depth")    { ss >> token; depth = std::stoi(token); }
                 if (token == "movetime") { ss >> token; /* save for later */ }
@@ -1054,30 +1417,9 @@ class UCI {
                 if (token == "binc")     { ss >> token; /* save for later */ }
             }
 
-            // temporary random move until search exists
-            uint32_t moves[256];
-            int count = mg.generateMoves(moves);
 
-            // filter illegal moves
-            uint32_t legalMoves[256];
-            int legalCount = 0;
-            for (int i = 0; i < count; i++) {
-                board.makeMove(moves[i]);
-                if (!board.isInCheck(board.side ^ 1)) {
-                    legalMoves[legalCount++] = moves[i];
-                }
-                board.unmakeMove();
-            }
+            uint32_t best = search.getBestMove(depth);
 
-            if (legalCount == 0) {
-                std::cout << "bestmove 0000\n"; // no legal moves
-                return;
-            }
-
-            // pick random legal move for now
-            uint32_t best = legalMoves[rand() % legalCount];
-
-            // convert to coordinate string
             int from = getFrom(best);
             int to   = getTo(best);
             std::string moveStr;
@@ -1086,7 +1428,6 @@ class UCI {
             moveStr += (char)('a' + to % 8);
             moveStr += (char)('1' + to / 8);
 
-            // append promotion if needed
             if (getPromotion(best) != 0) {
                 int promo = getPromotion(best);
                 if (promo < 0) promo = -promo;
@@ -1107,7 +1448,9 @@ int main() {
     Board board;
     board.initBoard();
     moveGen mg(board);
-    UCI uci(board, mg);
+    Eval eval(board);
+    Search search(board, mg, eval);
+    UCI uci(board, mg, search);
 
     uci.uciLoop();
     return 0;

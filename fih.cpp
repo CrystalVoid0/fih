@@ -3,7 +3,8 @@
 #include <string>
 #include <thread>
 #include <chrono>
-
+#include <sstream>
+#include <atomic>
 
 // ================================= //
 // |       fih chess engine        | //
@@ -43,8 +44,9 @@
 // 24     enPassant flag
 // 25     castle flag
 
+std::atomic<bool> stop(false);
 
-
+static const std::string defaultBoard = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 static const int PIECE_OFFSET = 7; // offset added before storing signed piece values
 
 inline uint32_t encodeMove(int from, int to, int piece, int captured, int promotion, bool enPassant, bool castle) {
@@ -189,6 +191,27 @@ class Board {
         // ========================= //
         // | Board class functions | //
         // ========================= //
+
+        void newGame() {//resets everything
+            side = halfmove_clock = HistoryIndex = 0; //reset all int variables
+            wkscr = wqscr = bkscr = bqscr = true; //reset castling rules
+            wPawns = wBishop = wKnight = wRook = wKing = 0; //set all white piece bitboards to 0
+            bPawns = bBishop = bKnight = bRook = bKing = 0; //set all black piece bitboards to 0
+
+            for (int i = 0; i < 4096; i++) { //reset the moveHistory list and stateHistory
+                moveHistory[i] = 0;
+                BoardState emptyState;
+                emptyState.wkscr = true;
+                emptyState.wqscr = true;
+                emptyState.bkscr = true;
+                emptyState.bqscr = true;
+                emptyState.side = 0;
+                emptyState.halfmove_clock = 0;
+                stateHistory[i] = emptyState;
+            }
+
+            loadFEN(defaultBoard);
+        }
 
         void loadFEN(const std::string& fen) { //yes this was coded with claude since I also hate handling inputs and dealing with strings in c++ if it where python I code code this but its not :|
             wPawns = wKnight = wBishop = wRook = wQueen = wKing = 0;
@@ -679,7 +702,7 @@ class moveGen {
 
             return nodes;
         }
-        
+
         void perftDivide(int depth) {
             uint32_t moves[256];
             int count = generateMoves(moves);
@@ -920,33 +943,172 @@ class Eval {
 
 class UCI {
     public:
+        Board& board;
+        moveGen& mg;
         std::string line;
-        void uciUP() {
+
+        UCI(Board& b, moveGen& m) : board(b), mg(m) {}
+
+        void uciLoop() {
             while (true) {
                 std::getline(std::cin, line);
+                if (line.empty()) continue;
+
                 if (line == "uci") {
-                    std::cout << "id name fih" << std::endl;
-                    std::cout << "id author Angelicide" << std::endl;
-                    std::cout << "uciok" << std::endl;
+                    std::cout << "id name fih\n";
+                    std::cout << "id author Angelicide\n";
+                    std::cout << "uciok\n";
                 }
-                else if (line  == "isready") {
-                    std::cout << "readyok" << std::endl;
+                else if (line == "isready") {
+                    std::cout << "readyok\n";
                 }
-            }   
+                else if (line == "ucinewgame") {
+                    board.newGame();
+                }
+                else if (line.rfind("position", 0) == 0) {
+                    parsePosition(line);
+                }
+                else if (line.rfind("go", 0) == 0) {
+                    stop.store(false);
+                    parseGo(line);
+                }
+                else if (line == "stop") {
+                    stop.store(true);
+                }
+                else if (line == "quit") {
+                    break;
+                }
+            }
+        }
+
+    private:
+        uint32_t parseMove(const std::string& token) {
+            // token is like "e2e4" or "e7e8q"
+            int fromFile = token[0] - 'a';
+            int fromRank = token[1] - '1';
+            int toFile   = token[2] - 'a';
+            int toRank   = token[3] - '1';
+
+            int from = fromRank * 8 + fromFile;
+            int to   = toRank   * 8 + toFile;
+
+            int promoChar = (token.size() == 5) ? token[4] : 0;
+
+            uint32_t moves[256];
+            int count = mg.generateMoves(moves);
+
+            for (int i = 0; i < count; i++) {
+                if (getFrom(moves[i]) == from && getTo(moves[i]) == to) {
+                    if (promoChar == 0) return moves[i];
+                    // check promotion matches
+                    int promo = getPromotion(moves[i]);
+                    int abspromo = (promo < 0) ? -promo : promo;
+                    if (promoChar == 'q' && abspromo == 5) return moves[i];
+                    if (promoChar == 'r' && abspromo == 4) return moves[i];
+                    if (promoChar == 'b' && abspromo == 3) return moves[i];
+                    if (promoChar == 'n' && abspromo == 2) return moves[i];
+                }
+            }
+            return 0;
+        }
+
+
+        void parsePosition(const std::string& line) {
+            std::istringstream ss(line);
+            std::string token;
+            ss >> token; // consume "position"
+
+            ss >> token;
+            if (token == "startpos") {
+                board.loadFEN(defaultBoard);
+                ss >> token; // try to consume "moves"
+            }
+            else if (token == "fen") {
+                std::string fen;
+                while (ss >> token && token != "moves") {
+                    fen += token + " ";
+                }
+                board.loadFEN(fen);
+            }
+
+            if (token == "moves") {
+                while (ss >> token) {
+                    board.makeMove(parseMove(token));
+                }
+            }
+        }
+
+        void parseGo(const std::string& line) {
+            std::istringstream ss(line);
+            std::string token;
+            ss >> token; // consume "go"
+
+            // parse parameters for later when search exists
+            int depth = 4;
+            while (ss >> token) {
+                if (token == "depth")    { ss >> token; depth = std::stoi(token); }
+                if (token == "movetime") { ss >> token; /* save for later */ }
+                if (token == "wtime")    { ss >> token; /* save for later */ }
+                if (token == "btime")    { ss >> token; /* save for later */ }
+                if (token == "winc")     { ss >> token; /* save for later */ }
+                if (token == "binc")     { ss >> token; /* save for later */ }
+            }
+
+            // temporary random move until search exists
+            uint32_t moves[256];
+            int count = mg.generateMoves(moves);
+
+            // filter illegal moves
+            uint32_t legalMoves[256];
+            int legalCount = 0;
+            for (int i = 0; i < count; i++) {
+                board.makeMove(moves[i]);
+                if (!board.isInCheck(board.side ^ 1)) {
+                    legalMoves[legalCount++] = moves[i];
+                }
+                board.unmakeMove();
+            }
+
+            if (legalCount == 0) {
+                std::cout << "bestmove 0000\n"; // no legal moves
+                return;
+            }
+
+            // pick random legal move for now
+            uint32_t best = legalMoves[rand() % legalCount];
+
+            // convert to coordinate string
+            int from = getFrom(best);
+            int to   = getTo(best);
+            std::string moveStr;
+            moveStr += (char)('a' + from % 8);
+            moveStr += (char)('1' + from / 8);
+            moveStr += (char)('a' + to % 8);
+            moveStr += (char)('1' + to / 8);
+
+            // append promotion if needed
+            if (getPromotion(best) != 0) {
+                int promo = getPromotion(best);
+                if (promo < 0) promo = -promo;
+                switch(promo) {
+                    case 5: moveStr += 'q'; break;
+                    case 4: moveStr += 'r'; break;
+                    case 3: moveStr += 'b'; break;
+                    case 2: moveStr += 'n'; break;
+                }
+            }
+
+            std::cout << "bestmove " << moveStr << "\n";
         }
 };
+
 
 int main() {
     Board board;
     board.initBoard();
-    board.loadFEN("r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ");
-
     moveGen mg(board);
+    UCI uci(board, mg);
 
-    // expected: depth1=20, depth2=400, depth3=8902, depth4=197281
-    for (int d = 1; d <= 10; d++) {
-        uint64_t result = mg.perft(d);
-        std::cout << "Depth " << d << ": " << result << "\n";
-    }
+    uci.uciLoop();
     return 0;
 }

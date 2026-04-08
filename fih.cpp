@@ -6,6 +6,14 @@
 #include <sstream>
 #include <atomic>
 
+
+
+/* 
+THIS IS NOT THE NEWEST VERISION DUE TO THE REASONS STATED IN THE README I WILL PUBLISH THE NEWEST VERISION ONCE I FEEL IT IS STRONG ENOUGH (~2000 ELO)
+*/
+
+
+
 // ================================= //
 // |       fih chess engine        | //
 // ================================= //

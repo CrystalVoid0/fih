@@ -1,5 +1,4 @@
-# fih
----
-**fih** is a work in progress chess engine aimed to be a learning opportunity. Currently it is unable to make any moves but hopefully in a couple of days I will have search and evalutations functions done with support for basic UCI intergration. I still have a lot of things to add and implement into this engine, maybe even an NNUE since Im lucky enough to have a decent graphics card. The main goal for me (yes Im doing this fully solo) is to get it up to 2500 elo hopefully. Since making a chess engine that is able to beat me wouldnt be that hard. There are a lot of improvments that can be made to my code since Im not a very good coder and entirely self taught. The releases page is mostly going to be used to just keep track of all the major builds so I can play them against each other. For example the very first build will likely be a bot that just plays random moves then a very simple evaluation function that just totals up the piece values etc.
-
-
+![My Image](fih2.png)
+<h1 align="center">fih²</h1>
+fih² is a work in progress chess engine to acomplish the goal at getting better and more comfortable with C++. This engine is probably not going to be anywhere near beating top level engines but will hopefully someday be able to beat any human. This is also my third try at this the first one having way to many bugs, so I changed up the code. The second attempt ended up with a working engine but with a lot of copy and pasted code that I didn't write. The third and final attempt will hopefully be the last and I will continue improving on it instead of writing a new one from scratch.
+Also dear school district why did you block chess.com?
